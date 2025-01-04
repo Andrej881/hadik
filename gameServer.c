@@ -15,7 +15,8 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
         game->timeEnd = false;
     }  
 
-    game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));   
+    game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
+    CreatList(&game->apples, 10, sizeof(Coord));        
     game->numOfCurPLayers = 0;
 }
 
@@ -39,6 +40,7 @@ int AddPlayer(GameInfo* game)
             findingSpace = false;
         }
     }
+    CreatePlayer(&game->players[freeIndex].player, game->players[freeIndex].player.head);
     return freeIndex;
 }
 
@@ -80,4 +82,22 @@ void MovePlayer(GameInfo* game, Player* player)
     player->head.y = player->head.y < 0 ? game->height-1 : player->head.y;
     player->head.x = player->head.x >= game->width ? 0 : player->head.x;   
     player->head.y = player->head.y >= game->height ? 0 : player->head.y;
+}
+
+void GenerateApple(GameInfo* game)
+{
+    Coord apple;
+    apple.x = rand() % game->width;        
+    apple.y = rand() % game->height;
+    AddList(&game->apples, &apple);
+}
+
+void RemoveGame(GameInfo* game)
+{
+    FreeList(&game->apples);
+    for(int i = game->numOfCurPLayers-1; i >= 0; i--)
+    {
+        RemovePlayer(game, &game->players[i]);
+    }
+    free(game->players);
 }

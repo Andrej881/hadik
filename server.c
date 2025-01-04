@@ -40,7 +40,7 @@ void* play_game(void* arg) {
     if (index == -1)
     {   
         printf("error adding player");
-        return;
+        return NULL;
     }
     sem_post(&game_lock);
 
@@ -199,6 +199,7 @@ int main(int argc, char *argv[]) {
     }
 
     close(serverInfo.sockfd);
+    RemoveGame(&game);
     sem_destroy(&game_lock);  // Zničenie semaforu po ukončení
     return 0;
 }

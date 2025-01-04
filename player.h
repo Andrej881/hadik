@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "list.h"
 
 typedef enum {UP, DOWN, RIGHT, LEFT} Direction;
 
@@ -9,9 +10,7 @@ typedef struct Coord{
 
 typedef struct Player{
     Coord head;
-    Coord* bodyParts;
-    int numOfParts;
-    int capacity;
+    List bodyParts;
     Direction curDir;
 } Player;
 

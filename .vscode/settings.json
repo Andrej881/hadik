@@ -5,6 +5,7 @@
         "in.h": "c",
         "stdio.h": "c",
         "string.h": "c",
-        "termios.h": "c"
+        "termios.h": "c",
+        "dynamicarray.h": "c"
     },
 }

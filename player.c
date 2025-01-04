@@ -3,31 +3,15 @@ void CreatePlayer(Player * player, Coord coord)
 {
     player->head = coord;
 
-    player->capacity = 10;
-    player->bodyParts = malloc(player->capacity * sizeof(Coord));
-    player->numOfParts = 0;
-
+    CreatList(&player->bodyParts, 15, sizeof(Coord));
     player->curDir = RIGHT;
 }
 
 void AddPart(Player * player, Coord coord)
 {   
-    ++player->numOfParts;
-    if (player->numOfParts > player->capacity)
-    {
-        player->capacity *= 2;
-        Coord* temp = realloc(player->bodyParts, player->capacity * sizeof(Coord));
-        if (temp != NULL) 
-        {
-            player->bodyParts = temp;
-        }
-        else 
-        {        
-            fprintf(stderr, "Chyba: Nedostatok pamäte\n");
-            exit(EXIT_FAILURE);
-        }
-    }   
-    player->bodyParts[player->numOfParts-1] = coord;
+    Coord new = coord;
+    printf("%d\n",new.x);
+    AddList(&player->bodyParts, &new);
 }
 
 void Move(Player* player)
@@ -48,10 +32,10 @@ void Move(Player* player)
         player->head.x--;
         break;
     }          
-    for (int i = 0; i < player->numOfParts; ++i)
+    for (int i = 0; i < player->bodyParts.end; ++i)
     {
-        Coord partCoordBeforeMove2 = player->bodyParts[i];
-        player->bodyParts[i] = partCoordBeforeMove;
+        Coord partCoordBeforeMove2 = *(Coord *)GetList(&player->bodyParts,i);
+        *(Coord *)GetList(&player->bodyParts,i) = partCoordBeforeMove;
         partCoordBeforeMove = partCoordBeforeMove2;
     }
 }
@@ -84,6 +68,5 @@ int TryChangeDir(Player* player, Direction dir)
 
 void DeletePlayer(Player* player)
 {
-    free(player->bodyParts);
-    player->bodyParts = NULL;
+    FreeList(&player->bodyParts);
 }
