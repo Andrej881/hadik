@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) {
 	
 	int x1,y1;
     int x2,y2;
+    int id;
 	char lastCh = 'd'; 
     int running = 1;
     while (running == 1) {
@@ -105,7 +106,6 @@ int main(int argc, char *argv[]) {
         }
    
         usleep(200000);   
-
         n = write(sockfd, buffer, strlen(buffer));
         if (n < 0) {
             error("ERROR writing to socket");
@@ -116,8 +116,8 @@ int main(int argc, char *argv[]) {
         if (n < 0) {
             error("ERROR reading from socket");
         }
-		sscanf(buffer, "%d %d %d %d", &x1, &y1, &x2, &y2);
-        printf("%d %d %d %d\n", x1, y1, x2, y2);
+		sscanf(buffer, "%d %d %d %d %d",&id, &x1, &y1, &x2, &y2);
+        printf("%d %d %d %d %d\n",id, x1, y1, x2, y2);
     }
 
     close(sockfd);
