@@ -16,6 +16,6 @@ typedef struct Player{
 
 void CreatePlayer(Player *  player, Coord coord);
 void AddPart(Player * player, Coord coord);
-void Move(Player* player);
+Coord Move(Player* player);
 int TryChangeDir(Player* player, Direction dir);
 void DeletePlayer(Player* player);

@@ -9,7 +9,7 @@
 #include <semaphore.h>
 #include <time.h>
 
-#include "gameServer.h"
+#include "game.h"
 
 typedef struct ServerInfo{
     int sockfd, newsockfd;
@@ -73,7 +73,7 @@ void* play_game(void* arg) {
             removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);
         }
 		
-        MovePlayer(serverPLayer->game, &serverPLayer->game->players[index].player);    
+        MovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);    
 
 		printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
 		fflush(NULL);

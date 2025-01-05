@@ -14,7 +14,7 @@ void AddPart(Player * player, Coord coord)
     AddList(&player->bodyParts, &new);
 }
 
-void Move(Player* player)
+Coord Move(Player* player)
 {    
     Coord partCoordBeforeMove = player->head;
     switch (player->curDir)
@@ -38,6 +38,7 @@ void Move(Player* player)
         *(Coord *)GetList(&player->bodyParts,i) = partCoordBeforeMove;
         partCoordBeforeMove = partCoordBeforeMove2;
     }
+    return partCoordBeforeMove;
 }
 
 int TryChangeDir(Player* player, Direction dir)
