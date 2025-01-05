@@ -41,6 +41,7 @@ int AddPlayer(GameInfo* game)
         }
     }
     CreatePlayer(&game->players[freeIndex].player, game->players[freeIndex].player.head);
+    GenerateApple(game);
     return freeIndex;
 }
 
@@ -74,14 +75,28 @@ int RemovePlayer(GameInfo* game, PlayerArrayInfo* player)
     return index;
 }
 
-void MovePlayer(GameInfo* game, Player* player)
-{    
-    Move(player);
+bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player)
+{
+    if (CheckHeadCollision(game, player))
+    {
+        return true;
+    }
+    if(true)
+    {}
+    if(true)
+    {}
+}
 
-    player->head.x = player->head.x < 0 ? game->width-1 : player->head.x;    
-    player->head.y = player->head.y < 0 ? game->height-1 : player->head.y;
-    player->head.x = player->head.x >= game->width ? 0 : player->head.x;   
-    player->head.y = player->head.y >= game->height ? 0 : player->head.y;
+void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
+{    
+    Move(player);   
+
+    player->player.head.x = player->player.head.x < 0 ? game->width-1 : player->player.head.x;    
+    player->player.head.y = player->player.head.y < 0 ? game->height-1 : player->player.head.y;
+    player->player.head.x = player->player.head.x >= game->width ? 0 : player->player.head.x;   
+    player->player.head.y = player->player.head.y >= game->height ? 0 : player->player.head.y;
+
+    GameCheckCollisionWithPlayers(game, player);
 }
 
 void GenerateApple(GameInfo* game)

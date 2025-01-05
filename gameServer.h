@@ -21,7 +21,8 @@ typedef struct GameInfo
 void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameTime);
 bool CheckHeadCollision(GameInfo* game, PlayerArrayInfo* player);
 int AddPlayer(GameInfo* game);
-void MovePlayer(GameInfo* game, Player* player);
+bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player);
+void MovePlayer(GameInfo* game, PlayerArrayInfo* player);
 int RemovePlayer(GameInfo* game, PlayerArrayInfo* player);
 void GenerateApple(GameInfo* game);
 void RemoveGame(GameInfo* game);
