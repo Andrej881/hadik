@@ -55,7 +55,7 @@ void* play_game(void* arg) {
 
         // Uzamknutie semaforu pre bezpečný prístup k zdieľaným dátam
         sem_wait(&game_lock);
-        printf("player %d index %d\n",serverPLayer->player_id, index);
+        //printf("player %d index %d\n",serverPLayer->player_id, index);
 		ch = buffer[0];
 		if (ch == 'w' || ch == 's' || ch == 'a' || ch == 'd' || ch == 'q')
 			lastCh = ch;
@@ -75,7 +75,7 @@ void* play_game(void* arg) {
 		
         MovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);    
 
-		printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
+		//printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
 		fflush(NULL);
         // Synchronizácia stavu hry - poslanie nových pozícií všetkým hráčom		        
         if(index > removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
@@ -87,9 +87,10 @@ void* play_game(void* arg) {
 		size_t bufferSize = SerializeServerMessage(&buff, serverPLayer->game);
         sem_post(&game_lock);
 
-        printf("writing to Player %d\n", serverPLayer->player_id);
-        PrintGameContent(serverPLayer->game);
-        send(serverPLayer->client_sock, buff, bufferSize, 0);        
+        //printf("writing to Player %d\n", serverPLayer->player_id);
+        //PrintGameContent(serverPLayer->game);
+        send(serverPLayer->client_sock, buff, bufferSize, 0);     
+        usleep(200000);   
         free(buff);
     }
     close(serverPLayer->client_sock);

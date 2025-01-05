@@ -1,117 +1,186 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <time.h> 
 
-#include <termios.h>    // pre termios
-#include <time.h>       // pre srand()
-#include <fcntl.h>
+#include "clientGame.h"
 
-#include "comunication.h"
-
-#define MAX_BUF 10000
-
-#define WIDTH 30
-#define HEIGHT 15
+#define SCREEN_WIDTH 30
+#define SCREEN_HEIGHT 11
 
 void setup_terminal(struct termios *original) {
     struct termios new_settings;
-    tcgetattr(0, original);              // Uloženie pôvodných nastavení
+    tcgetattr(0, original);             
     new_settings = *original;
-    new_settings.c_lflag &= ~(ICANON | ECHO); // Vypnutie kanonického režimu a echo
-    tcsetattr(0, TCSANOW, &new_settings);    // Aplikácia zmien
-
-    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);// aby sa necakalo na input
+    new_settings.c_lflag &= ~(ICANON | ECHO); 
+    new_settings.c_cc[VMIN] = 1;             
+    new_settings.c_cc[VTIME] = 0;  
+    tcsetattr(0, TCSANOW, &new_settings);    
 }
 
 void reset_terminal(struct termios *original) {
-    tcsetattr(0, TCSANOW, original); // Obnovenie pôvodných nastavení
+    tcsetattr(STDIN_FILENO, TCSANOW, original);
+}
+
+void PrintBorder(int i, int position)
+{
+    if((i < 3 && position == 1) || (i > 3 && i < 7 && position == 2) || (i > 7 && position == 3))
+    {
+        printf("@");
+    }
+    else
+    {
+        printf("#");
+    }
+}
+
+int GameMenu()
+{
+    int position = 2;
+    while (1)
+    {
+        system("clear");
+        for(int i = 0; i < SCREEN_HEIGHT; ++i)
+        {
+            for(int j = 0; j < SCREEN_WIDTH; ++j)
+            {
+                if(i == 0 || i == 2 || i == 4 || i == 6 || i == 8 || i == 10)
+                {
+                    PrintBorder(i, position);
+                }
+                else if(i != 3 && i != 7)
+                {
+                    if (j == 0 || j == SCREEN_WIDTH - 1)
+                    {
+                        PrintBorder(i, position);
+                    }
+                    else 
+                    {
+                        switch (i)
+                        {
+                        case 1:
+                            if (j == 10)
+                            {
+                                printf("NEW GAME");
+                                j += 7;
+                            }  
+                            else
+                            {                                
+                                printf(" ");
+                            }
+                            break;
+                        case 5:
+                            if (j == 10)
+                            {
+                                printf("JOIN GAME");
+                                j += 8;
+                            }      
+                            else
+                            {                                
+                                printf(" ");
+                            }                            
+                            break;
+                        case 9:
+                            if (j == 10)
+                            {
+                                printf("EXIT");
+                                j += 3;
+                            }    
+                            else
+                            {                                
+                                printf(" ");
+                            }
+                            break;
+                        }
+                    }
+                }     
+                else
+                {
+                    printf(" ");
+                }
+
+            }
+            printf("\n");
+        }
+        char ch;
+        bool reading = true;
+        while(reading)
+        {
+            if(read(STDIN_FILENO, &ch, 1) == 1)
+            {
+                reading = false;
+                switch(ch)
+                {
+                case 'w':
+                    position = position-1 >= 1 ? position - 1 : position;
+                    break;
+                case 's':
+                    position = position + 1 <= 3 ? position + 1 : position;
+                    break;
+                case '\n'://enter
+                    return position;
+                    break;
+                default:
+                    reading = true;
+                    break;                
+                }
+            } 
+        }
+        
+    }    
 }
 
 int main(int argc, char *argv[]) {
-    int sockfd, n;
-    struct sockaddr_in serv_addr;
-    char buffer[MAX_BUF];
+    ClientGameInfo info;    
 
 	struct termios original_settings;
-    setup_terminal(&original_settings); // Nastavenie terminálu
-    srand(time(NULL)); // Inicializácia random generátora
+    setup_terminal(&original_settings); 
+    srand(time(NULL)); 
 
-    if (argc < 3) {
-        fprintf(stderr,"usage %s hostname port\n", argv[0]);
-        return 1;
-    }
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("ERROR opening socket");
-        return 2;
-    }
-
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(atoi(argv[2]));
-
-    // Prevod hostiteľa na IP adresu
-    if (inet_pton(AF_INET, argv[1], &serv_addr.sin_addr) <= 0) {
-        perror("ERROR invalid host");
-        return 3;
-    }
-
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("ERROR connecting");
-        return 4;
-    }
-
-    printf("Connected to server\n");
+    if (argc < 2) {
+        fprintf(stderr,"usage %s hostname\n", argv[0]);
+        return EXIT_FAILURE;
+    }    
+	const char* ip = argv[1];
+    //int port = atoi(argv[2]);
+    
+    switch(GameMenu())
+    {        
+    case 1:
+        NewGame(&info);        
+        setup_terminal(&original_settings); 
+        break;
+    case 2:
+    {        
+        reset_terminal(&original_settings);
+        printf("Write Game Port: \n");
+        int port;
+        while (1) {
+            if (scanf("%d", &port) == 1) {
+                if (port >= 1024 && port <= 49151) {
+                    break; // Platné portové číslo, ukonči cyklus
+                } else {
+                    printf("Port number must be between 1024 amd 49151!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                // Vyčistenie vstupného bufferu
+                while (getchar() != '\n');
+            }
+            printf("Write Game Port: \n");
+        }
+        setup_terminal(&original_settings); 
+        if(JoinGame(&info,port,ip) != 0)
+        {
+            perror("Failed to join game");
+            reset_terminal(&original_settings);            
+            return EXIT_FAILURE;
+        }        
+        break;
+    }        
+    case 3:
+        printf("Ending...\n");
+        break;
+    }    
 	
-	int x1,y1;
-    int x2,y2;
-    int id;
-	char lastCh = 'd'; 
-    int running = 1;
-
-    GameInfo game;
-    CreateGame(&game, 2, 30, 15, 0);   
-
-    while (running == 1) {      
-		bzero(buffer, MAX_BUF);    
-        char ch;
-        if(read(STDIN_FILENO, &ch, 1) == 1)
-		{
-            lastCh = ch;
-		}
-        
-        buffer[0] = lastCh;
-
-        if (buffer[0] == 'q') {
-            running = 0;  // Ukončenie programu
-        }  
-          
-        n = write(sockfd, buffer, strlen(buffer));
-        if (n < 0) {
-            perror("ERROR writing to socket");
-            return 5;
-        }
-
-        bzero(buffer, MAX_BUF);
-        size_t bufferSize;
-        // Receive the serialized data
-        ssize_t test = recv(sockfd, buffer, MAX_BUF, 0);
-        if (test <= 0) {
-            printf("Failed to receive serialized data %ld", test);            
-            exit(EXIT_FAILURE);
-        }
-        DeserializeServerMessage(buffer, &game);
-        //PrintGameContent(&game);
-        DrawGame(&game);
-        //printf("head [%d, %d]\n", game.players[0].player.head.x, game.players[0].player.head.y);
-        usleep(200000); 
-    }
-
-    close(sockfd);
+    close(info.sockfd);
     reset_terminal(&original_settings);
     return 0;
 }
