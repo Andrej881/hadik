@@ -71,3 +71,15 @@ void DeletePlayer(Player* player)
 {
     FreeList(&player->bodyParts);
 }
+
+void PrintPlayer(Player* player)
+{
+    printf("Head [%d, %d]\n", player->head.x, player->head.y);
+    printf("BodyParts: ");
+    for (int i = 0; i < player->bodyParts.end; ++i)
+    {
+        Coord coord = *(Coord *)GetList(&player->bodyParts, i);
+        printf(" [%d, %d]", coord.x, coord.y);
+    }
+    printf("\n");
+}

@@ -193,3 +193,17 @@ bool ContainsApple(GameInfo* game,int y, int x, int * index)
     }
     return false;
 }
+
+void PrintGameContent(GameInfo* game)
+{
+    printf("width: %d height: %d players: %d/%d\n", game->width, game->height, game->numOfCurPLayers, game->numOfPlayers);
+    for (int i = 0; i < game->apples.end; ++i)
+    {
+        Coord coord = *(Coord *) GetList(&game->apples, i);
+        printf("apple %d [%d, %d]\n",i, coord.x, coord.y);
+    }
+    for (int i = 0;i < game->numOfCurPLayers; ++i)
+    {
+        PrintPlayer(&game->players[i].player);        
+    }
+}

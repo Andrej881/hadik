@@ -2,7 +2,11 @@
 
 size_t SerializeServerMessage(char** buffer, GameInfo* game)
 {
-    size_t size, appleListSize;
+    if (game == NULL) {
+    fprintf(stderr, "Error: GameInfo is NULL\n");
+    return 0;
+    }
+    size_t size = 0, appleListSize;
     size_t playerListSize[game->numOfCurPLayers];
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
@@ -10,11 +14,17 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
         size += playerListSize[i] + sizeof(int) * (4 + 2);
     }
     appleListSize = game->apples.capacity * game->apples.elementSize;
-    size += appleListSize + sizeof(int) * 4;
+    size += appleListSize + sizeof(int) * 5;
 
     *buffer = malloc(size);
+    if (*buffer == NULL) {
+    perror("malloc failed");
+    return 0;
+    }
     char* ptr = *buffer;
-
+    //numOfCurPlayers
+    memcpy(ptr, &game->numOfCurPLayers, sizeof(int));
+    ptr += sizeof(int);
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {    
         //Head
@@ -32,6 +42,7 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
 
         //List elements
         memcpy(ptr, game->players[i].player.bodyParts.elements, playerListSize[i]);
+        ptr += playerListSize[i];
     }    
 
     //Apples
@@ -54,12 +65,15 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
 void DeserializeServerMessage(char* buffer, GameInfo* game)
 {
     char* ptr = buffer;
-
+    
+    //curPlayers
+    memcpy(&game->numOfCurPLayers, ptr, sizeof(int));
+    ptr += sizeof(int);
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
         //Head   
         memcpy(&game->players[i].player.head, ptr, sizeof(Coord));
-        ptr += sizeof(struct Coord);
+        ptr += sizeof(Coord);
 
         //List metadata
         memcpy(&game->players[i].player.bodyParts.capacity, ptr, sizeof(int));
@@ -75,6 +89,7 @@ void DeserializeServerMessage(char* buffer, GameInfo* game)
         size_t listSize = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;
         game->players[i].player.bodyParts.elements = malloc(listSize);
         memcpy(game->players[i].player.bodyParts.elements, ptr, listSize);
+        ptr += listSize;
     }
 
     //Apples
@@ -87,6 +102,8 @@ void DeserializeServerMessage(char* buffer, GameInfo* game)
     ptr += sizeof(int);
     memcpy(&game->apples.elementSize, ptr, sizeof(int));
     ptr += sizeof(int);
+
+    //printf("cap %d str %d end %d elSize %d\n",game->apples.capacity, game->apples.start, game->apples.end, game->apples.elementSize);
 
     //List elements
     size_t listSize = game->apples.capacity * game->apples.elementSize;

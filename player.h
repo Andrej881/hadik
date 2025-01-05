@@ -19,3 +19,4 @@ void AddPart(Player * player, Coord coord);
 Coord Move(Player* player);
 int TryChangeDir(Player* player, Direction dir);
 void DeletePlayer(Player* player);
+void PrintPlayer(Player* player);

@@ -9,7 +9,7 @@
 #include <semaphore.h>
 #include <time.h>
 
-#include "game.h"
+#include "comunication.h"
 
 typedef struct ServerInfo{
     int sockfd, newsockfd;
@@ -77,25 +77,20 @@ void* play_game(void* arg) {
 
 		printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
 		fflush(NULL);
-
-        // Synchronizácia stavu hry - poslanie nových pozícií všetkým hráčom
-		char status[100]; 
-		bzero(status,100);         
+        // Synchronizácia stavu hry - poslanie nových pozícií všetkým hráčom		        
         if(index > removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
         {
             index--;
             curNum = serverPLayer->game->numOfCurPLayers;
-        }
-		for (int i = 0; i < serverPLayer->game->numOfCurPLayers; i++) {
-			char buffer[50];
-			bzero(buffer, 50);
-			snprintf(buffer, sizeof(buffer), "%d %d ", serverPLayer->game->players[i].player.head.x, serverPLayer->game->players[i].player.head.y);
-			strncat(status, buffer, sizeof(status) - strlen(status) - 1); 
-		}
-        printf("writing to Player %d\n", serverPLayer->player_id);
-		write(serverPLayer->client_sock, status, strlen(status));
-        
+        }        
+        char* buff;
+		size_t bufferSize = SerializeServerMessage(&buff, serverPLayer->game);
         sem_post(&game_lock);
+
+        printf("writing to Player %d\n", serverPLayer->player_id);
+        PrintGameContent(serverPLayer->game);
+        send(serverPLayer->client_sock, buff, bufferSize, 0);        
+        free(buff);
     }
     close(serverPLayer->client_sock);
     printf("Player %d disconnected\n", serverPLayer->player_id);      

@@ -31,4 +31,6 @@ bool ContainsPlayerBody(GameInfo* game,int y, int x);
 bool ContainsApple(GameInfo* game,int y, int x, int * index);//index on which the apple is in List
 void DrawGame(GameInfo* game);
 
+void PrintGameContent(GameInfo* game);
+
 
