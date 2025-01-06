@@ -1,10 +1,104 @@
 #include "clientGame.h"
 
-void NewGame(ClientGameInfo* info){}
+void SetupTerminal(struct termios *original) {
+    struct termios new_settings;
+    tcgetattr(0, original);             
+    new_settings = *original;
+    new_settings.c_lflag &= ~(ICANON | ECHO); 
+    new_settings.c_cc[VMIN] = 1;             
+    new_settings.c_cc[VTIME] = 0;  
+    tcsetattr(0, TCSANOW, &new_settings);    
+}
+
+void ResetTerminal(struct termios *original) {
+    tcsetattr(STDIN_FILENO, TCSANOW, original);
+}
+
+int NewGame(ClientGameInfo* info, int port)
+{    
+    int num;
+    while (1) {
+        printf("Write Num of players: \n");
+        if (scanf("%d", &num) == 1) {
+            if (num > 0) {
+                break; 
+            } else {
+                printf("Must be greater than 0!\n");
+            }
+        } else {
+            printf("Invalid input! Please enter a number.\n");
+                
+            while (getchar() != '\n');
+        }
+    }    
+
+    int width;
+    while (1) {
+        printf("Write Width: \n");
+        if (scanf("%d", &width) == 1) {
+            if (width > 0) {
+                break; 
+            } else {
+                printf("Must be greater than 0!\n");
+            }
+        } else {
+            printf("Invalid input! Please enter a number.\n");
+                
+            while (getchar() != '\n');
+        }
+    }  
+
+    int height;
+    while (1) {
+        printf("Write Height: \n");
+        if (scanf("%d", &height) == 1) {
+            if (height > 0) {
+                break; 
+            } else {
+                printf("Must be greater than 0!\n");
+            }
+        } else {
+            printf("Invalid input! Please enter a number.\n");
+                
+            while (getchar() != '\n');
+        }
+    }   
+    
+    char numStr[12], widthStr[12], heightStr[12], portStr[12];
+    snprintf(numStr, sizeof(numStr), "%d", num);
+    snprintf(widthStr, sizeof(widthStr), "%d", width);
+    snprintf(heightStr, sizeof(heightStr), "%d", height);
+    snprintf(portStr, sizeof(portStr), "%d", port);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+        return -1;
+    } else if (pid == 0) {
+        // Server
+        printf("Spúšťam server v detskom procese...\n");
+
+        
+        char *server_path = "./server";
+        char *args[] = {server_path, portStr, numStr, widthStr, heightStr, NULL};
+
+        if (execvp(server_path, args) < 0) {
+            perror("execvp failed");
+            return -2;
+        }
+    } else {
+        // Klient
+        CreateGame(&info->game, num, width, height, 0);
+        usleep(2000000);
+        return JoinGame(info, port, "127.0.0.1");
+    }
+
+    return 0;
+}
 
 int JoinGame(ClientGameInfo* info, int port, const char* ip)
-{
-    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
+{    
+    CreateGame(&info->game, 5, 30, 15, 0);
 
     info->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (info->sockfd < 0) {
@@ -31,16 +125,44 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
     return 0;
 }
 
-void Run(ClientGameInfo* info)
+void* DrawToClient(void* args)
+{   
+    ClientGameInfo* info = (ClientGameInfo*) args;
+    char buffer[MAX_BUF];    
+    int running = true;
+    while(running)
+    {   
+        bzero(buffer, MAX_BUF);
+        size_t bufferSize;
+        // Receive the serialized data
+        ssize_t test = recv(info->sockfd, buffer, MAX_BUF, 0);
+        if (test <= 0) {
+            printf("Failed to receive serialized data %ld", test);            
+            return NULL;
+        }
+        DeserializeServerMessage(buffer, &info->game);
+        //PrintGameContent(&info->game);
+        DrawGame(&info->game);
+
+        pthread_mutex_lock(&info->mutex);
+        running = info->running; 
+        pthread_mutex_unlock(&info->mutex);
+    }
+
+    
+}
+
+void* ManageInputs(void* args)
 {
+    ClientGameInfo* info = (ClientGameInfo*) args;
+
     char buffer[MAX_BUF];
-
 	char lastCh = 'd'; 
-    int running = 1;
-
-    CreateGame(&info->game, 2, 30, 15, 0);   
-
-    while (running == 1) {      
+    info->running = true;
+    
+    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
+    while (info->running) { 
+        usleep(1000000);      
 		bzero(buffer, MAX_BUF);    
         char ch;
         if(read(STDIN_FILENO, &ch, 1) == 1)
@@ -49,32 +171,41 @@ void Run(ClientGameInfo* info)
 		}
         
         buffer[0] = lastCh;
-
         if (buffer[0] == 'q') {
-            running = 0;  // Ukončenie programu
+            pthread_mutex_lock(&info->mutex);
+            info->running = false;  // Ukončenie programu            
+            pthread_mutex_unlock(&info->mutex);
         }  
-          
+             
         info->n = write(info->sockfd, buffer, strlen(buffer));
         if (info->n < 0) {            
-            //reset_terminal(&info->original_settings);
             perror("ERROR writing to socket");
-            return;
+            return NULL;
         }
+    }
+}
 
-        bzero(buffer, MAX_BUF);
-        size_t bufferSize;
-        // Receive the serialized data
-        ssize_t test = recv(info->sockfd, buffer, MAX_BUF, 0);
-        if (test <= 0) {
-            //reset_terminal(&info->original_settings);
-            printf("Failed to receive serialized data %ld", test);            
-            return;
-        }
-        DeserializeServerMessage(buffer, &info->game);
-        //PrintGameContent(&info->game);
-        DrawGame(&info->game);
-        //printf("head [%d, %d]\n", info->game.players[0].player.head.x, info->game.players[0].player.head.y);
-        //usleep(200000); 
+void Run(ClientGameInfo* info)
+{
+    printf("Running\n");
+    info->running = true;
+    
+    pthread_mutex_init(&info->mutex, NULL);
+    
+    SetupTerminal(&info->original);
+
+    info->threads = malloc(2 * sizeof(pthread_t));
+
+    pthread_create(&info->threads[0], NULL, &ManageInputs, info);
+    pthread_create(&info->threads[1], NULL, &DrawToClient, info);
+    
+    for(int i = 0; i < 2; ++i)
+    {
+        pthread_join(info->threads[i], NULL);
     }
 
+    ResetTerminal(&info->original);
+    free(info->threads);
+    info->threads = NULL;
+    pthread_mutex_destroy(&info->mutex);
 }

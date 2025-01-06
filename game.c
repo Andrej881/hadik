@@ -1,7 +1,7 @@
 #include "game.h"
 
 void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameTime)
-{
+{    
     game->numOfPlayers = numOfplayers;
     game->width = width;
     game->height = height;
@@ -115,7 +115,7 @@ void RemoveGame(GameInfo* game)
 }
 
 void DrawGame(GameInfo* game)
-{
+{          
     system("clear");
     for(int i = 0; i < game->height; ++i)
     {        

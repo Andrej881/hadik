@@ -43,11 +43,11 @@ void* play_game(void* arg) {
         return NULL;
     }
     sem_post(&game_lock);
-
+    
     while (running == 1) {
         // Čítanie pohybu od hráča
         bzero(buffer, 256);
-        n = read(serverPLayer->client_sock, buffer, 255);
+        n = read(serverPLayer->client_sock, buffer, 255);      
         if (n < 0) {
             perror("Error reading from socket");
             break;
@@ -72,7 +72,6 @@ void* play_game(void* arg) {
             running = 0;
             removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);
         }
-		
         MovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);    
 
 		//printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
@@ -88,9 +87,9 @@ void* play_game(void* arg) {
         sem_post(&game_lock);
 
         //printf("writing to Player %d\n", serverPLayer->player_id);
-        //PrintGameContent(serverPLayer->game);
-        send(serverPLayer->client_sock, buff, bufferSize, 0);     
-        usleep(200000);   
+        //PrintGameContent(serverPLayer->game);        
+        send(serverPLayer->client_sock, buff, bufferSize, 0);   
+        //usleep(200000);   
         free(buff);
     }
     close(serverPLayer->client_sock);
