@@ -35,7 +35,11 @@ int AddPlayer(GameInfo* game)
     {
         head.x = rand() % game->width;
         head.y = rand() % game->height;
-        if(!ContainsPlayerHead(game, head.x, head.y, -1))
+        if(ContainsPlayerHead(game, head.x, head.y, -1) == 0)
+        {
+            findingSpace = false;
+        }
+        if(ContainsPlayerBody(game, head.x, head.y, -1) == 0)
         {
             findingSpace = false;
         }
@@ -63,11 +67,11 @@ int RemovePlayer(GameInfo* game, PlayerArrayInfo* player)
 bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player)
 {
     Coord head = player->player.head;
-    if (ContainsPlayerHead(game, head.y, head.x, player->index))
+    if (ContainsPlayerHead(game, head.y, head.x, player->index) == 1)
     {
         return true;
     }
-    if(ContainsPlayerBody(game, head.y, head.x))
+    if (ContainsPlayerBody(game, head.y, head.x, -1) != 0)
     {
         return true;
     }
@@ -92,7 +96,8 @@ void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
     {
         AddPart(&player->player, coord);
         RemoveList(&game->apples, appleIndex);
-        GenerateApple(game);
+        if(game->apples.end < game->numOfCurPLayers)
+            GenerateApple(game);
     }
 }
 
@@ -114,22 +119,34 @@ void RemoveGame(GameInfo* game)
     free(game->players);
 }
 
-void DrawGame(GameInfo* game)
+void DrawGame(GameInfo* game, int playerIndex)
 {          
     system("clear");
+    if (playerIndex >= 0)
+        printf("Score: %d\n", game->players[playerIndex].player.bodyParts.end);
     for(int i = 0; i < game->height; ++i)
     {        
         for(int j = 0; j < game->width; ++j)
-        {
-            if(ContainsPlayerHead(game,i,j,-1))
+        {               
+            int headTest = ContainsPlayerHead(game, i, j, playerIndex);
+            int bodyTest = ContainsPlayerBody(game, i, j, playerIndex);
+            if(headTest == 1)
+            {
+                printf("Q");
+            }
+            else if(headTest == -1)
             {
                 printf("@");
             }
-            else if(ContainsPlayerBody(game,i,j))
+            else if(bodyTest == 1)
+            {
+                printf("U");
+            }
+            else if(bodyTest == -1)
             {
                 printf("O");
             }
-            else if(ContainsApple(game,i,j,NULL))
+            else if(ContainsApple(game, i, j, NULL))
             {
                 printf("#");
             }
@@ -142,24 +159,27 @@ void DrawGame(GameInfo* game)
     }
 }
 
-bool ContainsPlayerHead(GameInfo* game,int y, int x, int playerIndex)//if playerIndex = -1 ignore
-{
+int ContainsPlayerHead(GameInfo* game,int y, int x, int index)//if index = -1 ignore 
+{    
     for (int i = 0; i < game->numOfCurPLayers; ++i)
-    {
-        if(playerIndex == game->players[i].index)
-        {
-            continue;
-        }
+    {        
         Coord head = game->players[i].player.head;
         if(head.x == x && head.y == y)
-        {            
-            return true;
+        {           
+            if(index == game->players[i].index)
+            {
+                return -1;
+            } 
+            else
+            {
+                return 1;
+            }
         }
     }
-    return false;
+    return 0;
 }
 
-bool ContainsPlayerBody(GameInfo* game,int y, int x)
+int ContainsPlayerBody(GameInfo* game,int y, int x, int index)
 {
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
@@ -169,11 +189,18 @@ bool ContainsPlayerBody(GameInfo* game,int y, int x)
             Coord body = *(Coord *)GetList(&bodys, j);
             if(body.x == x && body.y == y)
             {
-                return true;
+                if(index == game->players[i].index)
+                {
+                    return -1;
+                } 
+                else
+                {
+                    return 1;
+                }
             }
         }
     }
-    return false;
+    return 0;
 }
 
 bool ContainsApple(GameInfo* game,int y, int x, int * index)

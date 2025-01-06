@@ -26,10 +26,10 @@ int RemovePlayer(GameInfo* game, PlayerArrayInfo* player);
 void GenerateApple(GameInfo* game);
 void RemoveGame(GameInfo* game);
 
-bool ContainsPlayerHead(GameInfo* game,int y, int x, int index);
-bool ContainsPlayerBody(GameInfo* game,int y, int x);
+int ContainsPlayerHead(GameInfo* game,int y, int x, int index);// return 0-false 1-true -1-head of player on index
+int ContainsPlayerBody(GameInfo* game,int y, int x, int index);
 bool ContainsApple(GameInfo* game,int y, int x, int * index);//index on which the apple is in List
-void DrawGame(GameInfo* game);
+void DrawGame(GameInfo* game, int playerIndex);//-1 means all players look the same
 
 void PrintGameContent(GameInfo* game);
 

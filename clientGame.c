@@ -132,53 +132,67 @@ void* DrawToClient(void* args)
     int running = true;
     while(running)
     {   
+        usleep(166670);
         bzero(buffer, MAX_BUF);
         size_t bufferSize;
         // Receive the serialized data
-        ssize_t test = recv(info->sockfd, buffer, MAX_BUF, 0);
+        ssize_t test = -1;
+        pthread_mutex_lock(&info->mutex);
+        if(!info->running)
+        {            
+            running = info->running; 
+            pthread_mutex_unlock(&info->mutex);
+            continue;
+        }
+        test = recv(info->sockfd, buffer, MAX_BUF, 0);
+        pthread_mutex_unlock(&info->mutex);
         if (test <= 0) {
             printf("Failed to receive serialized data %ld", test);            
             return NULL;
         }
-        DeserializeServerMessage(buffer, &info->game);
+        int playerIndex;
+        DeserializeServerMessage(buffer, &info->game, &playerIndex);
         //PrintGameContent(&info->game);
-        DrawGame(&info->game);
+        info->game.players[playerIndex].index = playerIndex;
+        if (playerIndex == 0)
+        {
+            for (int i = 1; i < info->game.numOfCurPLayers; ++i)
+            {
+                info->game.players[i].index = -1;                
+            }
+        }
+        DrawGame(&info->game, playerIndex);
 
         pthread_mutex_lock(&info->mutex);
         running = info->running; 
         pthread_mutex_unlock(&info->mutex);
     }
-
     
 }
 
 void* ManageInputs(void* args)
 {
     ClientGameInfo* info = (ClientGameInfo*) args;
-
     char buffer[MAX_BUF];
 	char lastCh = 'd'; 
-    info->running = true;
-    
+    int n;
     fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
-    while (info->running) { 
-        usleep(1000000);      
-		bzero(buffer, MAX_BUF);    
+    while (info->running) {  
+        usleep(200000);  
         char ch;
         if(read(STDIN_FILENO, &ch, 1) == 1)
 		{
             lastCh = ch;
-		}
-        
+		}        
+		bzero(buffer, MAX_BUF);  
         buffer[0] = lastCh;
         if (buffer[0] == 'q') {
             pthread_mutex_lock(&info->mutex);
             info->running = false;  // Ukončenie programu            
             pthread_mutex_unlock(&info->mutex);
-        }  
-             
-        info->n = write(info->sockfd, buffer, strlen(buffer));
-        if (info->n < 0) {            
+        } 
+        n = write(info->sockfd, buffer, strlen(buffer));
+        if (n < 0) {            
             perror("ERROR writing to socket");
             return NULL;
         }
@@ -189,7 +203,7 @@ void Run(ClientGameInfo* info)
 {
     printf("Running\n");
     info->running = true;
-    
+
     pthread_mutex_init(&info->mutex, NULL);
     
     SetupTerminal(&info->original);
@@ -197,6 +211,7 @@ void Run(ClientGameInfo* info)
     info->threads = malloc(2 * sizeof(pthread_t));
 
     pthread_create(&info->threads[0], NULL, &ManageInputs, info);
+    usleep(200000);
     pthread_create(&info->threads[1], NULL, &DrawToClient, info);
     
     for(int i = 0; i < 2; ++i)

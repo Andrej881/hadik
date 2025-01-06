@@ -1,6 +1,6 @@
 #include "comunication.h"
 
-size_t SerializeServerMessage(char** buffer, GameInfo* game)
+size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
 {
     if (game == NULL) {
     fprintf(stderr, "Error: GameInfo is NULL\n");
@@ -14,7 +14,7 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
         size += playerListSize[i] + sizeof(int) * (4 + 2);
     }
     appleListSize = game->apples.capacity * game->apples.elementSize;
-    size += appleListSize + sizeof(int) * 5;
+    size += appleListSize + sizeof(int) * 6;
 
     *buffer = malloc(size);
     if (*buffer == NULL) {
@@ -22,6 +22,10 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
     return 0;
     }
     char* ptr = *buffer;
+    //playerIndex
+    memcpy(ptr, &playerIndex, sizeof(int));
+    ptr += sizeof(int);
+
     //numOfCurPlayers
     memcpy(ptr, &game->numOfCurPLayers, sizeof(int));
     ptr += sizeof(int);
@@ -62,10 +66,13 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
     return size;
 }
 
-void DeserializeServerMessage(char* buffer, GameInfo* game)
+void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 {
-    char* ptr = buffer;
+    char* ptr = buffer;    
     
+    //playerIndex
+    memcpy(playerIndex, ptr, sizeof(int));
+    ptr += sizeof(int);
     //curPlayers
     memcpy(&game->numOfCurPLayers, ptr, sizeof(int));
     ptr += sizeof(int);

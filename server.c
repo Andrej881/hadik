@@ -18,34 +18,42 @@ typedef struct ServerInfo{
 }ServerInfo;
 
 typedef struct ServerPlayer{
-    int player_id;
+    sem_t * game_lock;
+    int * removedIndex;
+    int player_id, index;
     int client_sock;
-    GameInfo * game;
+    GameInfo * game;    
+    bool * activePlayers;
+    bool ended;
 } ServerPlayer;
 
-int removedIndex = 141006540;
-sem_t game_lock;  // Semafor pre synchronizáciu
+typedef struct ServerSendingThread{
+    ServerPlayer * players;
+    int numOfPlayers;
+}ServerSendingThread;
 
-void* play_game(void* arg) {
-    ServerPlayer* serverPLayer = (ServerPlayer*)arg;  // Získanie informácií o hráčovi
+void* readPlayerDirection(void* args)
+{
+    ServerPlayer* serverPLayer = (ServerPlayer*) args;
+
     char buffer[256];
     int n;
 	char lastCh = 'd';
 	char ch;
-	int running = 1;
+	int running = 1;    
     printf("Player %d connected\n", serverPLayer->player_id);
-    sem_wait(&game_lock);
-    int index = AddPlayer(serverPLayer->game);
+
+    sem_wait(serverPLayer->game_lock);
+    serverPLayer->index = AddPlayer(serverPLayer->game);
     int curNum = serverPLayer->game->numOfCurPLayers;
-    if (index == -1)
+    if (serverPLayer->index == -1)
     {   
         printf("error adding player");
         return NULL;
     }
-    sem_post(&game_lock);
-    
-    while (running == 1) {
-        // Čítanie pohybu od hráča
+    sem_post(serverPLayer->game_lock);
+
+    while (running == 1) {    
         bzero(buffer, 256);
         n = read(serverPLayer->client_sock, buffer, 255);      
         if (n < 0) {
@@ -53,47 +61,70 @@ void* play_game(void* arg) {
             break;
         }
 
-        // Uzamknutie semaforu pre bezpečný prístup k zdieľaným dátam
-        sem_wait(&game_lock);
-        //printf("player %d index %d\n",serverPLayer->player_id, index);
+        sem_wait(serverPLayer->game_lock);
 		ch = buffer[0];
 		if (ch == 'w' || ch == 's' || ch == 'a' || ch == 'd' || ch == 'q')
 			lastCh = ch;
-        // Spracovanie pohybu hráča
         if (lastCh == 'w') {
-            TryChangeDir(&serverPLayer->game->players[index].player, UP);
+            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, UP);
         } else if (lastCh == 's') {
-            TryChangeDir(&serverPLayer->game->players[index].player, DOWN);
+            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, DOWN);
         } else if (lastCh == 'a') {
-            TryChangeDir(&serverPLayer->game->players[index].player, LEFT);
+            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, LEFT);
         } else if (lastCh == 'd') {
-            TryChangeDir(&serverPLayer->game->players[index].player, RIGHT);
+            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, RIGHT);
         }else if (lastCh == 'q') {
             running = 0;
-            removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);
+            *serverPLayer->removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);
         }
-        MovePlayer(serverPLayer->game, &serverPLayer->game->players[index]);    
-
-		//printf("%c\t%d %d\n",buffer[0], serverPLayer->game->players[index].player.head.x, serverPLayer->game->players[index].player.head.y);
-		fflush(NULL);
-        // Synchronizácia stavu hry - poslanie nových pozícií všetkým hráčom		        
-        if(index > removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
+        MovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);            
+	        
+        if(serverPLayer->index > *serverPLayer->removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
         {
-            index--;
+            serverPLayer->index--;
             curNum = serverPLayer->game->numOfCurPLayers;
-        }        
-        char* buff;
-		size_t bufferSize = SerializeServerMessage(&buff, serverPLayer->game);
-        sem_post(&game_lock);
-
-        //printf("writing to Player %d\n", serverPLayer->player_id);
-        //PrintGameContent(serverPLayer->game);        
-        send(serverPLayer->client_sock, buff, bufferSize, 0);   
-        //usleep(200000);   
-        free(buff);
+        }   
+        //DrawGame(serverPLayer->game);
+        sem_post(serverPLayer->game_lock);
     }
-    close(serverPLayer->client_sock);
-    printf("Player %d disconnected\n", serverPLayer->player_id);      
+
+    close(serverPLayer->client_sock);    
+    serverPLayer->activePlayers[serverPLayer->player_id] = false;
+    printf("Player %d disconnected\n", serverPLayer->player_id);   
+    pthread_exit(NULL);
+}
+
+void* sendGameData(void* args)
+{
+    ServerSendingThread* data = (ServerSendingThread*)args;
+    bool running = true;
+
+    while(running)
+    {
+        bool tmp = false;
+        sem_wait(data->players[0].game_lock);
+        for (int i = 0; i < data->numOfPlayers; ++i)
+        {
+            if(!data->players[0].activePlayers[i])
+                continue;
+            if (!data->players[i].ended)
+            {
+                running = true;
+                tmp = true;
+                char* buff;
+                size_t bufferSize = SerializeServerMessage(&buff, data->players[i].game, data->players[i].index);
+                    
+                send(data->players[i].client_sock, buff, bufferSize, 0);
+                free(buff);
+            }
+            else if(!tmp)
+            {
+                running = false;
+            }
+        }
+        sem_post(data->players[0].game_lock);
+        usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
+    }  
 }
 
 int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
@@ -126,25 +157,28 @@ int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
 
 //port, numOfPLayers(1-n), width(5-n), height(5-n), timeEnd()
 int main(int argc, char *argv[]) {
+    
     srand(time(NULL));
     if (argc < 5) {
         fprintf(stderr,"usage %s port, numOfPLayers, width, height, timeEnd(optional)\n", argv[0]);
-        return 1;
+        return EXIT_FAILURE;
     }
-
+    
+    int removedIndex = 141006540;
+    sem_t game_lock;
     GameInfo game;
     int numOfPlayers = atoi(argv[2]);
     if (numOfPlayers < 1)
     {
         printf("%d must be atleast 1", numOfPlayers);
-        return 1;
+        return EXIT_FAILURE;
     }
     int width = atoi(argv[3]);
     int height = atoi(argv[4]);
     if (width < 5 || height < 5)
     {
         printf("%d and %d  both must be atleast 5", width, height);
-        return 2;
+        return EXIT_FAILURE;
     }
     int time = 0;
     if (argc == 6)
@@ -160,31 +194,62 @@ int main(int argc, char *argv[]) {
     ServerInfo serverInfo;
     init(&serverInfo, atoi(argv[1]), numOfPlayers);//init socket
 
-    pthread_t threads[numOfPlayers];  // Vlákna pre hráčov
-    int current_player = 0;
+    bool activePlayers[numOfPlayers];
+    pthread_t threads[numOfPlayers + 1];  // Vlákna pre hráčov
+    int currentPlayer = 0;
     ServerPlayer players[numOfPlayers];
+    ServerSendingThread data;
+    data.players = players;
+    data.numOfPlayers = numOfPlayers;
+
+    for(int i = 0; i < numOfPlayers; ++i)
+    {
+        players[i].game = &game;  
+        players[i].removedIndex = &removedIndex;  
+        players[i].ended = false;
+        players[i].activePlayers = activePlayers;
+        players[i].game_lock = &game_lock;
+
+        activePlayers[i] = false;
+    }
+
+    if (pthread_create(&threads[numOfPlayers], NULL, &sendGameData, &data) != 0) {
+        perror("Error creating thread");
+        return EXIT_FAILURE;
+    }
+
     while (1) {
-        // Akceptovanie pripojení klientov
-        serverInfo.newsockfd = accept(serverInfo.sockfd, (struct sockaddr*)&serverInfo.cli_addr, &serverInfo.cli_len);
-        if (serverInfo.newsockfd < 0) {
-            perror("ERROR on accept");
-            return 2;
+        int newsockfd = accept(serverInfo.sockfd, (struct sockaddr *)&serverInfo.cli_addr, &serverInfo.cli_len);
+        if (newsockfd < 0) {
+            perror("ERROR on accepting");
+            continue;
         }
 
-        // Priradenie hráča a jeho socketu
-        players[current_player].player_id = current_player;
-        players[current_player].client_sock = serverInfo.newsockfd;
-        players[current_player].game = &game;
+        currentPlayer = -1;
+        for (int i = 0; i < numOfPlayers; i++) {
+            if (!activePlayers[i]) {
+                currentPlayer = i;
+                break;
+            }
+        }
+
+        if (currentPlayer == -1) {
+            printf("Server full. Connection rejected.\n");
+            close(newsockfd);
+            continue;
+        }
+
+        players[currentPlayer].player_id = currentPlayer;
+        players[currentPlayer].client_sock = newsockfd;
+
+        activePlayers[currentPlayer] = true;
 
         // Vytvorenie vlákna pre každého pripojeného hráča
-        if (pthread_create(&threads[current_player], NULL, play_game, &players[current_player]) != 0) {
+        if (pthread_create(&threads[currentPlayer], NULL, &readPlayerDirection, &players[currentPlayer]) != 0) {
             perror("Error creating thread");
-            return 3;
-        }
-
-        current_player++;  // Prejdeme na ďalšieho hráča
-        if (current_player >= numOfPlayers) {
-            break;  // Ak je dostatok hráčov, ukončíme akceptovanie ďalších hráčov
+            activePlayers[currentPlayer] = false;
+            close(newsockfd);
+            continue;
         }
     }
 

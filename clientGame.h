@@ -16,7 +16,7 @@ typedef struct ClientGameInfo
 {
     struct termios original;
     bool running;
-    int sockfd, n;
+    int sockfd;
     struct sockaddr_in serv_addr;
     GameInfo game;
     pthread_t * threads;

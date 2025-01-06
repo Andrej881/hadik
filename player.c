@@ -10,7 +10,6 @@ void CreatePlayer(Player * player, Coord coord)
 void AddPart(Player * player, Coord coord)
 {   
     Coord new = coord;
-    printf("%d\n",new.x);
     AddList(&player->bodyParts, &new);
 }
 
