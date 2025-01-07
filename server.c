@@ -132,10 +132,13 @@ void* sendGameData(void* args)
         time_t start = time(NULL);
         bool tmp = false;
         pthread_mutex_lock(data->players[0].gameMutex);
+        if(data->end)
+        {            
+            pthread_mutex_unlock(data->players[0].gameMutex); 
+            break;
+        }
         for (int i = 0; i < data->numOfPlayers; ++i)
         {
-            if(data->end)
-                break;
             if(!data->players[0].activePlayers[i])
                 continue;
             if (!data->players[i].ended)
@@ -157,7 +160,6 @@ void* sendGameData(void* args)
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
         data->players[0].game->runningTime += (time(NULL) - start);
     } 
-    pthread_mutex_unlock(data->players[0].gameMutex); 
 }
 
 int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
@@ -261,7 +263,7 @@ int main(int argc, char *argv[]) {
     bool timerActive = false;
     bool hasPlayerJoined = false; // Flag to ensure the timer only starts after the first player joins
     time_t timerStart = 0;
-
+    int maxActiveThreads = 0;
     while (1) {
         fd_set readfds;
         struct timeval timeout;
@@ -283,7 +285,7 @@ int main(int argc, char *argv[]) {
         // Timer check: If active and no players joined in 10 seconds, shut down the server
         if (timerActive) {
             time_t currentTime = time(NULL);
-            if (currentTime - timerStart >= 10) {
+            if (currentTime - timerStart >= 1) {
                 pthread_mutex_lock(&gameMutex);
                 data.end = true;
                 pthread_mutex_unlock(&gameMutex);
@@ -315,6 +317,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
 
+            maxActiveThreads = maxActiveThreads < currentPlayer ? currentPlayer : maxActiveThreads;
             players[currentPlayer].player_id = currentPlayer;
             players[currentPlayer].client_sock = newsockfd;
 
@@ -352,7 +355,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    for (int i = 0; i < numOfPlayers; i++) {
+    printf("[SendData] %ld\n", threads[numOfPlayers]);
+    fflush(NULL);
+    pthread_join(threads[numOfPlayers], NULL);
+    for (int i = 0; i <= maxActiveThreads && i < numOfPlayers; i++) {
+        printf("[%d] %ld\n",i, threads[i]);
+        fflush(NULL);
         pthread_join(threads[i], NULL);
     }
     close(serverInfo.sockfd);
