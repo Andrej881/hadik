@@ -1,5 +1,3 @@
-#include <time.h> 
-
 #include "clientGame.h"
 
 #define SCREEN_WIDTH 30

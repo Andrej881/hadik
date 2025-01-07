@@ -11,7 +11,7 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
         playerListSize[i] = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;
-        size += playerListSize[i] + sizeof(int) * (4 + 2);
+        size += playerListSize[i] + sizeof(int) * (4 + 2) + sizeof(bool);
     }
     appleListSize = game->apples.capacity * game->apples.elementSize;
     size += appleListSize + sizeof(int) * 6;
@@ -34,6 +34,10 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
         //Head
         memcpy(ptr, &game->players[i].player.head, sizeof(Coord));
         ptr += sizeof(Coord);
+        //Dead
+        memcpy(ptr, &game->players[i].player.dead, sizeof(bool));
+        ptr += sizeof(bool);
+
         //List metadata
         memcpy(ptr, &game->players[i].player.bodyParts.capacity, sizeof(int));
         ptr += sizeof(int);
@@ -81,6 +85,9 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
         //Head   
         memcpy(&game->players[i].player.head, ptr, sizeof(Coord));
         ptr += sizeof(Coord);
+        //Dead
+        memcpy(&game->players[i].player.dead, ptr, sizeof(bool));
+        ptr += sizeof(bool);
 
         //List metadata
         memcpy(&game->players[i].player.bodyParts.capacity, ptr, sizeof(int));

@@ -131,7 +131,7 @@ void* DrawToClient(void* args)
     char buffer[MAX_BUF];    
     int running = true;
     while(running)
-    {   
+    {  
         usleep(166670);
         bzero(buffer, MAX_BUF);
         size_t bufferSize;
@@ -164,6 +164,8 @@ void* DrawToClient(void* args)
         DrawGame(&info->game, playerIndex);
 
         pthread_mutex_lock(&info->mutex);
+        if (info->dead != info->game.players[playerIndex].player.dead)
+            info->dead = !info->dead;
         running = info->running; 
         pthread_mutex_unlock(&info->mutex);
     }
@@ -188,7 +190,8 @@ void* ManageInputs(void* args)
         buffer[0] = lastCh;
         if (buffer[0] == 'q') {
             pthread_mutex_lock(&info->mutex);
-            info->running = false;  // Ukončenie programu            
+            if (info->dead)
+                info->running = false;  // Ukončenie programu            
             pthread_mutex_unlock(&info->mutex);
         } 
         n = write(info->sockfd, buffer, strlen(buffer));
@@ -203,6 +206,7 @@ void Run(ClientGameInfo* info)
 {
     printf("Running\n");
     info->running = true;
+    info->dead = false;
 
     pthread_mutex_init(&info->mutex, NULL);
     

@@ -2,7 +2,7 @@
 void CreatePlayer(Player * player, Coord coord)
 {
     player->head = coord;
-
+    player->dead = false;
     CreatList(&player->bodyParts, 15, sizeof(Coord));
     player->curDir = RIGHT;
 }
@@ -81,4 +81,10 @@ void PrintPlayer(Player* player)
         printf(" [%d, %d]", coord.x, coord.y);
     }
     printf("\n");
+}
+
+void ResetPlayer(Player * player, Coord coord)
+{
+    DeletePlayer(player);
+    CreatePlayer(player, coord);
 }

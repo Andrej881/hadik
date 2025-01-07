@@ -6,8 +6,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <semaphore.h>
-#include <time.h>
 
 #include "comunication.h"
 
@@ -18,13 +16,16 @@ typedef struct ServerInfo{
 }ServerInfo;
 
 typedef struct ServerPlayer{
-    sem_t * game_lock;
+    pthread_mutex_t * game_lock;
+    pthread_cond_t * waitCondition;
     int * removedIndex;
     int player_id, index;
     int client_sock;
     GameInfo * game;    
+    bool * waiting;
     bool * activePlayers;
     bool ended;
+    bool paused;
 } ServerPlayer;
 
 typedef struct ServerSendingThread{
@@ -41,9 +42,9 @@ void* readPlayerDirection(void* args)
 	char lastCh = 'd';
 	char ch;
 	int running = 1;    
-    printf("Player %d connected\n", serverPLayer->player_id);
+    printf("Player %d connected waiting 3s\n", serverPLayer->player_id);   
 
-    sem_wait(serverPLayer->game_lock);
+    pthread_mutex_lock(serverPLayer->game_lock);
     serverPLayer->index = AddPlayer(serverPLayer->game);
     int curNum = serverPLayer->game->numOfCurPLayers;
     if (serverPLayer->index == -1)
@@ -51,41 +52,66 @@ void* readPlayerDirection(void* args)
         printf("error adding player");
         return NULL;
     }
-    sem_post(serverPLayer->game_lock);
+    *serverPLayer->waiting = true;
+    pthread_mutex_unlock(serverPLayer->game_lock);
+
+    sleep(3);
+
+    pthread_mutex_lock(serverPLayer->game_lock);
+    *serverPLayer->waiting = false;
+    pthread_cond_broadcast(serverPLayer->waitCondition);
+    pthread_mutex_unlock(serverPLayer->game_lock);
 
     while (running == 1) {    
+
+        pthread_mutex_lock(serverPLayer->game_lock);
+        while (*serverPLayer->waiting) {
+            pthread_cond_wait(serverPLayer->waitCondition, serverPLayer->game_lock);
+        }
+        pthread_mutex_unlock(serverPLayer->game_lock);
+
         bzero(buffer, 256);
-        n = read(serverPLayer->client_sock, buffer, 255);      
+        n = read(serverPLayer->client_sock, buffer, 255); 
         if (n < 0) {
             perror("Error reading from socket");
             break;
         }
 
-        sem_wait(serverPLayer->game_lock);
-		ch = buffer[0];
-		if (ch == 'w' || ch == 's' || ch == 'a' || ch == 'd' || ch == 'q')
-			lastCh = ch;
-        if (lastCh == 'w') {
-            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, UP);
-        } else if (lastCh == 's') {
-            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, DOWN);
-        } else if (lastCh == 'a') {
-            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, LEFT);
-        } else if (lastCh == 'd') {
-            TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, RIGHT);
-        }else if (lastCh == 'q') {
-            running = 0;
-            *serverPLayer->removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);
-        }
-        MovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);            
+		ch = buffer[0];  
+        pthread_mutex_lock(serverPLayer->game_lock);          
+        if(ch != lastCh)
+        {
+            if (ch == '\n' && serverPLayer->game->players[serverPLayer->index].player.dead) {
+            ResetPlayerInGame(serverPLayer->game, serverPLayer->index);
+            } else if (ch == 'q' && serverPLayer->game->players[serverPLayer->index].player.dead) {
+                printf("Q\n");
+                running = 0;
+                *serverPLayer->removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);
+            } else if(ch == 'p') {
+                serverPLayer->paused = !serverPLayer->paused;
+                usleep(100000);
+            }else if (ch == 'w' && !serverPLayer->paused) {
+                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, UP);
+            } else if (ch == 's' && !serverPLayer->paused) {
+                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, DOWN);
+            } else if (ch == 'a' && !serverPLayer->paused) {
+                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, LEFT);
+            } else if (ch == 'd' && !serverPLayer->paused) {
+                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, RIGHT);
+            }
+        }      
+        
+        if(!serverPLayer->paused)
+            MovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);            
 	        
         if(serverPLayer->index > *serverPLayer->removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
         {
             serverPLayer->index--;
             curNum = serverPLayer->game->numOfCurPLayers;
         }   
-        //DrawGame(serverPLayer->game);
-        sem_post(serverPLayer->game_lock);
+        //DrawGame(serverPLayer->game,-1);
+        pthread_mutex_unlock(serverPLayer->game_lock);
+        lastCh = ch;
     }
 
     close(serverPLayer->client_sock);    
@@ -100,9 +126,9 @@ void* sendGameData(void* args)
     bool running = true;
 
     while(running)
-    {
+    {      
         bool tmp = false;
-        sem_wait(data->players[0].game_lock);
+        pthread_mutex_lock(data->players[0].game_lock);
         for (int i = 0; i < data->numOfPlayers; ++i)
         {
             if(!data->players[0].activePlayers[i])
@@ -122,7 +148,7 @@ void* sendGameData(void* args)
                 running = false;
             }
         }
-        sem_post(data->players[0].game_lock);
+        pthread_mutex_unlock(data->players[0].game_lock);
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
     }  
 }
@@ -165,7 +191,8 @@ int main(int argc, char *argv[]) {
     }
     
     int removedIndex = 141006540;
-    sem_t game_lock;
+    pthread_mutex_t game_lock;
+    pthread_cond_t waitCond;
     GameInfo game;
     int numOfPlayers = atoi(argv[2]);
     if (numOfPlayers < 1)
@@ -180,35 +207,40 @@ int main(int argc, char *argv[]) {
         printf("%d and %d  both must be atleast 5", width, height);
         return EXIT_FAILURE;
     }
-    int time = 0;
+    int timeEnd = 0;
     if (argc == 6)
     {
-        time = atoi(argv[5]);
-        time = time < 1 ? 0 : time;
+        timeEnd = atoi(argv[5]);
+        timeEnd = timeEnd < 1 ? 0 : timeEnd;
     }
 
-    CreateGame(&game, numOfPlayers, width, height, time);
+    CreateGame(&game, numOfPlayers, width, height, timeEnd);
 
-    sem_init(&game_lock, 0, 1);
+    pthread_mutex_init(&game_lock,NULL);
+    pthread_cond_init(&waitCond,NULL);
 
     ServerInfo serverInfo;
     init(&serverInfo, atoi(argv[1]), numOfPlayers);//init socket
 
     bool activePlayers[numOfPlayers];
-    pthread_t threads[numOfPlayers + 1];  // Vlákna pre hráčov
+    pthread_t threads[numOfPlayers + 1]; //players + sending;
     int currentPlayer = 0;
     ServerPlayer players[numOfPlayers];
     ServerSendingThread data;
     data.players = players;
     data.numOfPlayers = numOfPlayers;
-
+    bool waiting = true;
     for(int i = 0; i < numOfPlayers; ++i)
     {
         players[i].game = &game;  
         players[i].removedIndex = &removedIndex;  
         players[i].ended = false;
+        players[i].paused = false;
         players[i].activePlayers = activePlayers;
         players[i].game_lock = &game_lock;
+        players[i].waitCondition = &waitCond;
+        
+        players[i].waiting = &waiting;
 
         activePlayers[i] = false;
     }
@@ -244,7 +276,6 @@ int main(int argc, char *argv[]) {
 
         activePlayers[currentPlayer] = true;
 
-        // Vytvorenie vlákna pre každého pripojeného hráča
         if (pthread_create(&threads[currentPlayer], NULL, &readPlayerDirection, &players[currentPlayer]) != 0) {
             perror("Error creating thread");
             activePlayers[currentPlayer] = false;
@@ -253,13 +284,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Čakanie na dokončenie všetkých vlákien
     for (int i = 0; i < numOfPlayers; i++) {
         pthread_join(threads[i], NULL);
     }
 
     close(serverInfo.sockfd);
     RemoveGame(&game);
-    sem_destroy(&game_lock);  // Zničenie semaforu po ukončení
+    pthread_mutex_destroy(&game_lock);  
+    pthread_cond_destroy(&waitCond);
     return 0;
 }

@@ -16,6 +16,7 @@ typedef struct ClientGameInfo
 {
     struct termios original;
     bool running;
+    bool dead;
     int sockfd;
     struct sockaddr_in serv_addr;
     GameInfo game;

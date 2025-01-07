@@ -1,13 +1,15 @@
 #include "game.h"
 
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameTime)
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration)
 {    
     game->numOfPlayers = numOfplayers;
     game->width = width;
     game->height = height;
-    if(gameTime > 0)
+    game->zeroPlayersTimer = 0;
+    game->runningTime = 0;
+    if(gameDuration > 0)
     {
-        game->gameTime = gameTime;
+        game->gameDuration = gameDuration;
         game->timeEnd = true;
     }  
     else
@@ -46,7 +48,9 @@ int AddPlayer(GameInfo* game)
     }
     CreatePlayer(&game->players[freeIndex].player, head);
     game->numOfCurPLayers++;
-    GenerateApple(game);
+    
+    if(game->apples.end < game->numOfCurPLayers)
+        GenerateApple(game);
     return freeIndex;
 }
 
@@ -80,6 +84,8 @@ bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player)
 
 void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
 {    
+    if(player->player.dead)
+        return;
     Coord coord = Move(&player->player);   
 
     player->player.head.x = player->player.head.x < 0 ? game->width-1 : player->player.head.x;    
@@ -89,7 +95,7 @@ void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
 
     if (GameCheckCollisionWithPlayers(game, player))
     {
-        printf("LOST\n");
+        player->player.dead = true;
     }
     int appleIndex;
     if (ContainsApple(game, player->player.head.y, player->player.head.x, &appleIndex))
@@ -123,11 +129,16 @@ void DrawGame(GameInfo* game, int playerIndex)
 {          
     system("clear");
     if (playerIndex >= 0)
-        printf("Score: %d\n", game->players[playerIndex].player.bodyParts.end);
+        printf("Score: %d\tTime %ld\n", game->players[playerIndex].player.bodyParts.end, game->runningTime);
     for(int i = 0; i < game->height; ++i)
     {        
+        if(playerIndex >= 0 && game->players[playerIndex].player.dead && i == game->height / 2 - 3)
+        {
+            printf("\tYou died\n\tFinalScore [%d]\n\tPress Enter to play again\n\tPress q to leave\n", game->players[playerIndex].player.bodyParts.end);
+            continue;
+        }
         for(int j = 0; j < game->width; ++j)
-        {               
+        {    
             int headTest = ContainsPlayerHead(game, i, j, playerIndex);
             int bodyTest = ContainsPlayerBody(game, i, j, playerIndex);
             if(headTest == 1)
@@ -164,7 +175,7 @@ int ContainsPlayerHead(GameInfo* game,int y, int x, int index)//if index = -1 ig
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {        
         Coord head = game->players[i].player.head;
-        if(head.x == x && head.y == y)
+        if(head.x == x && head.y == y && !game->players[i].player.dead)
         {           
             if(index == game->players[i].index)
             {
@@ -183,6 +194,8 @@ int ContainsPlayerBody(GameInfo* game,int y, int x, int index)
 {
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
+        if (game->players[i].player.dead)
+            continue;
         List bodys = game->players[i].player.bodyParts;
         for(int j = 0; j < bodys.end; ++j)
         {
@@ -223,7 +236,7 @@ bool ContainsApple(GameInfo* game,int y, int x, int * index)
 
 void PrintGameContent(GameInfo* game)
 {
-    printf("width: %d height: %d players: %d/%d\n", game->width, game->height, game->numOfCurPLayers, game->numOfPlayers);
+    printf("width: %d height: %d players: %d/%d\nTime: %ld\n", game->width, game->height, game->numOfCurPLayers, game->numOfPlayers, game->runningTime);
     for (int i = 0; i < game->apples.end; ++i)
     {
         Coord coord = *(Coord *) GetList(&game->apples, i);
@@ -233,4 +246,24 @@ void PrintGameContent(GameInfo* game)
     {
         PrintPlayer(&game->players[i].player);        
     }
+}
+
+void ResetPlayerInGame(GameInfo* game, int index)
+{
+    bool findingSpace = true;
+    Coord head;
+    while(findingSpace)
+    {
+        head.x = rand() % game->width;
+        head.y = rand() % game->height;
+        if(ContainsPlayerHead(game, head.x, head.y, -1) == 0)
+        {
+            findingSpace = false;
+        }
+        if(ContainsPlayerBody(game, head.x, head.y, -1) == 0)
+        {
+            findingSpace = false;
+        }
+    }
+    ResetPlayer(&game->players[index].player, head);
 }
