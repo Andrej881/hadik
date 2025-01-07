@@ -13,17 +13,19 @@ typedef struct PlayerArrayInfo
 typedef struct GameInfo
 {
     int numOfPlayers, width, height;
-    time_t runningTime, zeroPlayersTimer;
-    bool timeEnd;
+    time_t runningTime;
     int gameDuration;
-    bool containsWalls;
+    bool timeEnd, containsWalls;
     PlayerArrayInfo* players;
     int numOfCurPLayers;
     List apples;
     Coord * walls;
+    int numOfAddedTraps;
 }GameInfo;
 
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration);
+bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height]);
+void GenerateWalls(GameInfo* game);
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls);
 int AddPlayer(GameInfo* game);
 bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player);
 void MovePlayer(GameInfo* game, PlayerArrayInfo* player);
@@ -35,6 +37,7 @@ void ResetPlayerInGame(GameInfo* game, int index);
 int ContainsPlayerHead(GameInfo* game,int y, int x, int index);// return 0-false 1-true -1-head of player on index
 int ContainsPlayerBody(GameInfo* game,int y, int x, int index);
 bool ContainsApple(GameInfo* game,int y, int x, int * index);//index on which the apple is in List
+bool ContainsWall(GameInfo* game,int y, int x);
 void DrawGame(GameInfo* game, int playerIndex);//-1 means all players look the same
 
 void PrintGameContent(GameInfo* game);

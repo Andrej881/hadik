@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
         timeEnd = timeEnd < 1 ? 0 : timeEnd;
     }
 
-    CreateGame(&game, numOfPlayers, width, height, timeEnd);
+    CreateGame(&game, numOfPlayers, width, height, timeEnd,false);
 
     pthread_mutex_init(&gameMutex,NULL);
     pthread_cond_init(&waitCond,NULL);

@@ -1,12 +1,103 @@
 #include "game.h"
 
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration)
+void GenerateWalls(GameInfo* game)
+{       
+    game->walls = malloc(((game->width * game->height)/4) * sizeof(Coord));
+    int map[game->width][game->height];
+    memset(map, 0, sizeof(map));
+
+    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    {
+        game->walls[i].x = -1;
+        game->walls[i].y = -1;
+    }
+    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    {
+        Coord coord;
+        while(1)
+        {
+            coord.x = rand() % game->width;
+            coord.y = rand() % game->height;
+            if(!ContainsWall(game, coord.x, coord.y) && !IsConnected(game, coord.x, coord.y,map))
+                break;
+        }
+        game->numOfAddedTraps++;
+        game->walls[i] = coord;
+        map[coord.y][coord.x] = 1;
+    }
+}
+
+bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height])
+{
+    int visited[game->width][game->height];    
+    memset(visited, 0, sizeof(visited));
+    int numOfVisitedPlaces = 0;
+    int BFSbuffer[(game->height * game->width)][2];
+    int start = 0, end = 0;
+
+    int start_x = -1, start_y = -1;
+    for(int i = 0; i < game->width; ++i)
+    {
+        for(int j = 0; j < game->height; ++j)
+        {
+            if(map[i][j] == 0)
+            {
+                start_x = i;
+                start_y = j;
+                numOfVisitedPlaces++;
+                break;
+            }
+        }
+        if(start_x != -1)
+            break;
+    }
+
+    visited[start_x][start_y] = 1;
+    BFSbuffer[end][0] = start_x;
+    BFSbuffer[end++][1] = start_y;
+
+    Coord dir[] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+
+    while(start < end)
+    {
+        int x = BFSbuffer[start][0];
+        int y = BFSbuffer[start++][1];
+        for(int i = 0; i < 4; ++i)
+        {
+            Coord nextDir = dir[i];
+            if(map[x + nextDir.x][y + nextDir.y] == 0 && nextDir.x >= 0 && nextDir.x < game->width && nextDir.y >= 0 && nextDir.y < game->height && visited[nextDir.x][nextDir.y] == 0)
+            {                            
+                BFSbuffer[end][0] = nextDir.x;
+                BFSbuffer[end++][1] = nextDir.y;
+                visited[nextDir.x][nextDir.y] = 1;
+                numOfVisitedPlaces++;
+            }
+        }
+    }
+
+    return numOfVisitedPlaces == (game->width * game->height) - game->numOfAddedTraps;
+}
+
+bool ContainsWall(GameInfo* game,int y, int x)
+{
+    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    {
+        if(game->walls[i].x = x && game->walls[i].y == y)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls)
 {    
+    game->numOfAddedTraps = 0;
     game->numOfPlayers = numOfplayers;
     game->width = width;
     game->height = height;
-    game->zeroPlayersTimer = 0;
     game->runningTime = 0;
+    game->containsWalls = walls;
     if(gameDuration > 0)
     {
         game->gameDuration = gameDuration;
@@ -20,6 +111,10 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
     CreatList(&game->apples, 10, sizeof(Coord));        
     game->numOfCurPLayers = 0;
+    if(walls)
+    {
+        GenerateWalls(game);
+    }
 }
 
 int AddPlayer(GameInfo* game)
@@ -123,6 +218,12 @@ void RemoveGame(GameInfo* game)
         RemovePlayer(game, &game->players[i]);
     }
     free(game->players);
+    game->players = NULL;
+    if(game->containsWalls)
+    {
+        free(game->walls);
+        game->walls = NULL;
+    }
 }
 
 void DrawGame(GameInfo* game, int playerIndex)

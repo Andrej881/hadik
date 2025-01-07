@@ -63,12 +63,34 @@ int NewGame(ClientGameInfo* info, int port)
             while (getchar() != '\n');
         }
     }   
+
+    int gameTime;
+    while (1) {
+        printf("Write Time in which game should end(0 means it ends only when there are no players): \n");
+        if (scanf("%d", &gameTime) == 1) {
+            if (gameTime >= 0) {
+                break; 
+            } else {
+                printf("Must be greater or equal to 0!\n");
+            }
+        } else {
+            printf("Invalid input! Please enter a number.\n");
+                
+            while (getchar() != '\n');
+        }
+    }   
+
+    char gameWalls[2];
+    bzero(&gameWalls,2);
+    printf("Write 1 if you want map with walls: \n");
+    scanf("%s", &gameWalls);       
     
-    char numStr[12], widthStr[12], heightStr[12], portStr[12];
+    char numStr[12], widthStr[12], heightStr[12], portStr[12], gameTimeStr[12];
     snprintf(numStr, sizeof(numStr), "%d", num);
     snprintf(widthStr, sizeof(widthStr), "%d", width);
     snprintf(heightStr, sizeof(heightStr), "%d", height);
     snprintf(portStr, sizeof(portStr), "%d", port);
+    snprintf(gameTimeStr, sizeof(gameTimeStr), "%d", gameTime);
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -80,7 +102,7 @@ int NewGame(ClientGameInfo* info, int port)
 
         
         char *server_path = "./server";
-        char *args[] = {server_path, portStr, numStr, widthStr, heightStr, NULL};
+        char *args[] = {server_path, portStr, numStr, widthStr, heightStr, gameTimeStr, gameWalls, NULL};
 
         if (execvp(server_path, args) < 0) {
             perror("execvp failed");
@@ -88,7 +110,8 @@ int NewGame(ClientGameInfo* info, int port)
         }
     } else {
         // Klient
-        CreateGame(&info->game, num, width, height, 0);
+        bool contain = gameWalls[0] == '1';
+        CreateGame(&info->game, num, width, height, gameTime, contain);
         usleep(2000000);
         return JoinGame(info, port, "127.0.0.1");
     }
@@ -98,7 +121,7 @@ int NewGame(ClientGameInfo* info, int port)
 
 int JoinGame(ClientGameInfo* info, int port, const char* ip)
 {    
-    CreateGame(&info->game, 5, 30, 15, 0);
+    CreateGame(&info->game, 5, 30, 15, 0, false);
 
     info->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (info->sockfd < 0) {
