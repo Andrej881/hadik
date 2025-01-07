@@ -127,6 +127,7 @@ void* sendGameData(void* args)
 
     while(running)
     {      
+        time_t start = time(NULL);
         bool tmp = false;
         pthread_mutex_lock(data->players[0].game_lock);
         for (int i = 0; i < data->numOfPlayers; ++i)
@@ -150,6 +151,7 @@ void* sendGameData(void* args)
         }
         pthread_mutex_unlock(data->players[0].game_lock);
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
+        data->players[0].game->runningTime += (time(NULL) - start);
     }  
 }
 
