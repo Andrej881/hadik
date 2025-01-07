@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +17,7 @@ typedef struct ServerInfo{
 }ServerInfo;
 
 typedef struct ServerPlayer{
-    pthread_mutex_t * game_lock;
+    pthread_mutex_t * gameMutex;
     pthread_cond_t * waitCondition;
     int * removedIndex;
     int player_id, index;
@@ -31,6 +32,7 @@ typedef struct ServerPlayer{
 typedef struct ServerSendingThread{
     ServerPlayer * players;
     int numOfPlayers;
+    bool end;
 }ServerSendingThread;
 
 void* readPlayerDirection(void* args)
@@ -44,7 +46,7 @@ void* readPlayerDirection(void* args)
 	int running = 1;    
     printf("Player %d connected waiting 3s\n", serverPLayer->player_id);   
 
-    pthread_mutex_lock(serverPLayer->game_lock);
+    pthread_mutex_lock(serverPLayer->gameMutex);
     serverPLayer->index = AddPlayer(serverPLayer->game);
     int curNum = serverPLayer->game->numOfCurPLayers;
     if (serverPLayer->index == -1)
@@ -53,22 +55,22 @@ void* readPlayerDirection(void* args)
         return NULL;
     }
     *serverPLayer->waiting = true;
-    pthread_mutex_unlock(serverPLayer->game_lock);
+    pthread_mutex_unlock(serverPLayer->gameMutex);
 
     sleep(3);
 
-    pthread_mutex_lock(serverPLayer->game_lock);
+    pthread_mutex_lock(serverPLayer->gameMutex);
     *serverPLayer->waiting = false;
     pthread_cond_broadcast(serverPLayer->waitCondition);
-    pthread_mutex_unlock(serverPLayer->game_lock);
+    pthread_mutex_unlock(serverPLayer->gameMutex);
 
     while (running == 1) {    
 
-        pthread_mutex_lock(serverPLayer->game_lock);
+        pthread_mutex_lock(serverPLayer->gameMutex);
         while (*serverPLayer->waiting) {
-            pthread_cond_wait(serverPLayer->waitCondition, serverPLayer->game_lock);
+            pthread_cond_wait(serverPLayer->waitCondition, serverPLayer->gameMutex);
         }
-        pthread_mutex_unlock(serverPLayer->game_lock);
+        pthread_mutex_unlock(serverPLayer->gameMutex);
 
         bzero(buffer, 256);
         n = read(serverPLayer->client_sock, buffer, 255); 
@@ -78,7 +80,7 @@ void* readPlayerDirection(void* args)
         }
 
 		ch = buffer[0];  
-        pthread_mutex_lock(serverPLayer->game_lock);          
+        pthread_mutex_lock(serverPLayer->gameMutex);          
         if(ch != lastCh)
         {
             if (ch == '\n' && serverPLayer->game->players[serverPLayer->index].player.dead) {
@@ -110,7 +112,7 @@ void* readPlayerDirection(void* args)
             curNum = serverPLayer->game->numOfCurPLayers;
         }   
         //DrawGame(serverPLayer->game,-1);
-        pthread_mutex_unlock(serverPLayer->game_lock);
+        pthread_mutex_unlock(serverPLayer->gameMutex);
         lastCh = ch;
     }
 
@@ -129,9 +131,11 @@ void* sendGameData(void* args)
     {      
         time_t start = time(NULL);
         bool tmp = false;
-        pthread_mutex_lock(data->players[0].game_lock);
+        pthread_mutex_lock(data->players[0].gameMutex);
         for (int i = 0; i < data->numOfPlayers; ++i)
         {
+            if(data->end)
+                break;
             if(!data->players[0].activePlayers[i])
                 continue;
             if (!data->players[i].ended)
@@ -149,10 +153,11 @@ void* sendGameData(void* args)
                 running = false;
             }
         }
-        pthread_mutex_unlock(data->players[0].game_lock);
+        pthread_mutex_unlock(data->players[0].gameMutex);
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
         data->players[0].game->runningTime += (time(NULL) - start);
-    }  
+    } 
+    pthread_mutex_unlock(data->players[0].gameMutex); 
 }
 
 int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
@@ -193,7 +198,7 @@ int main(int argc, char *argv[]) {
     }
     
     int removedIndex = 141006540;
-    pthread_mutex_t game_lock;
+    pthread_mutex_t gameMutex;
     pthread_cond_t waitCond;
     GameInfo game;
     int numOfPlayers = atoi(argv[2]);
@@ -218,7 +223,7 @@ int main(int argc, char *argv[]) {
 
     CreateGame(&game, numOfPlayers, width, height, timeEnd);
 
-    pthread_mutex_init(&game_lock,NULL);
+    pthread_mutex_init(&gameMutex,NULL);
     pthread_cond_init(&waitCond,NULL);
 
     ServerInfo serverInfo;
@@ -229,6 +234,7 @@ int main(int argc, char *argv[]) {
     int currentPlayer = 0;
     ServerPlayer players[numOfPlayers];
     ServerSendingThread data;
+    data.end = false;
     data.players = players;
     data.numOfPlayers = numOfPlayers;
     bool waiting = true;
@@ -239,7 +245,7 @@ int main(int argc, char *argv[]) {
         players[i].ended = false;
         players[i].paused = false;
         players[i].activePlayers = activePlayers;
-        players[i].game_lock = &game_lock;
+        players[i].gameMutex = &gameMutex;
         players[i].waitCondition = &waitCond;
         
         players[i].waiting = &waiting;
@@ -252,47 +258,106 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    bool timerActive = false;
+    bool hasPlayerJoined = false; // Flag to ensure the timer only starts after the first player joins
+    time_t timerStart = 0;
+
     while (1) {
-        int newsockfd = accept(serverInfo.sockfd, (struct sockaddr *)&serverInfo.cli_addr, &serverInfo.cli_len);
-        if (newsockfd < 0) {
-            perror("ERROR on accepting");
-            continue;
+        fd_set readfds;
+        struct timeval timeout;
+
+        FD_ZERO(&readfds);
+        FD_SET(serverInfo.sockfd, &readfds);
+
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        // Wait for incoming connection or timeout
+        int activity = select(serverInfo.sockfd + 1, &readfds, NULL, NULL, &timeout);
+
+        if (activity < 0) {
+            perror("Error in select");
+            break;
         }
 
-        currentPlayer = -1;
-        for (int i = 0; i < numOfPlayers; i++) {
-            if (!activePlayers[i]) {
-                currentPlayer = i;
+        // Timer check: If active and no players joined in 10 seconds, shut down the server
+        if (timerActive) {
+            time_t currentTime = time(NULL);
+            if (currentTime - timerStart >= 10) {
+                pthread_mutex_lock(&gameMutex);
+                data.end = true;
+                pthread_mutex_unlock(&gameMutex);
+                printf("No players connected for 10 seconds. Server shutting down.\n");
                 break;
             }
         }
 
-        if (currentPlayer == -1) {
-            printf("Server full. Connection rejected.\n");
-            close(newsockfd);
-            continue;
+        // Check for new connection
+        if (FD_ISSET(serverInfo.sockfd, &readfds)) {
+            int newsockfd = accept(serverInfo.sockfd, (struct sockaddr *)&serverInfo.cli_addr, &serverInfo.cli_len);
+            if (newsockfd < 0) {
+                perror("ERROR on accepting");
+                continue;
+            }
+
+            // Find an available player slot
+            currentPlayer = -1;
+            for (int i = 0; i < numOfPlayers; i++) {
+                if (!activePlayers[i]) {
+                    currentPlayer = i;
+                    break;
+                }
+            }
+
+            if (currentPlayer == -1) {
+                printf("Server full. Connection rejected.\n");
+                close(newsockfd);
+                continue;
+            }
+
+            players[currentPlayer].player_id = currentPlayer;
+            players[currentPlayer].client_sock = newsockfd;
+
+            activePlayers[currentPlayer] = true;
+            hasPlayerJoined = true; // Mark that at least one player has joined
+
+            // Reset timer if a new player connects
+            if (timerActive) {
+                timerActive = false;
+                printf("New player connected. Timer reset.\n");
+            }
+
+            if (pthread_create(&threads[currentPlayer], NULL, &readPlayerDirection, &players[currentPlayer]) != 0) {
+                perror("Error creating thread");
+                activePlayers[currentPlayer] = false;
+                close(newsockfd);
+                continue;
+            }
         }
 
-        players[currentPlayer].player_id = currentPlayer;
-        players[currentPlayer].client_sock = newsockfd;
+        // Check if all players have disconnected        
+        int activeCount = 0;
+        for (int i = 0; i < numOfPlayers; i++) {
+            
+            if (activePlayers[i]) {
+                activeCount++;
+            }
+        }
 
-        activePlayers[currentPlayer] = true;
-
-        if (pthread_create(&threads[currentPlayer], NULL, &readPlayerDirection, &players[currentPlayer]) != 0) {
-            perror("Error creating thread");
-            activePlayers[currentPlayer] = false;
-            close(newsockfd);
-            continue;
+        if (hasPlayerJoined && activeCount == 0 && !timerActive) {
+            // Start the timer only if at least one player has joined before
+            timerStart = time(NULL);
+            timerActive = true;
+            printf("No active players. Timer started.\n");
         }
     }
 
     for (int i = 0; i < numOfPlayers; i++) {
         pthread_join(threads[i], NULL);
     }
-
     close(serverInfo.sockfd);
     RemoveGame(&game);
-    pthread_mutex_destroy(&game_lock);  
+    pthread_mutex_destroy(&gameMutex);  
     pthread_cond_destroy(&waitCond);
     return 0;
 }
