@@ -1,10 +1,80 @@
 #include "comunication.h"
 
+void SerializeInitMessage(char* buffer, GameInfo* game)
+{
+    if (game == NULL) 
+    {
+        fprintf(stderr, "Error: GameInfo is NULL\n");
+        return;
+    }
+    char * ptr = buffer;
+
+    //numOfPlayers
+    memcpy(ptr, &game->numOfPlayers, sizeof(int));
+    ptr += sizeof(int);
+
+    //width
+    memcpy(ptr, &game->width, sizeof(int));
+    ptr += sizeof(int);
+
+    //height
+    memcpy(ptr, &game->height, sizeof(int));
+    ptr += sizeof(int);
+
+    //numOfWalls
+    memcpy(ptr, &game->numOfWalls, sizeof(int));    
+    ptr += sizeof(int);
+
+    //walls    
+    if(game->containsWalls)
+    {
+        memcpy(ptr, game->walls, sizeof(Coord) * game->numOfWalls);
+    }
+    
+}
+void DeserializeInitMessage(char* buffer, GameInfo* game)
+{
+    char* ptr = buffer;
+    int numOfPlayers, width, height, numOfWalls;
+    //numOfPlayers    
+    memcpy(&numOfPlayers, ptr, sizeof(int));
+    ptr += sizeof(int);
+    //width
+    memcpy(&width, ptr, sizeof(int));
+    ptr += sizeof(int);
+
+    //height
+    memcpy(&height, ptr, sizeof(int));
+    ptr += sizeof(int);
+
+    //numOfWalls
+    memcpy(&numOfWalls, ptr, sizeof(int));   
+    ptr += sizeof(int);
+    
+    CreateGame(game, numOfPlayers, width, height, 0, false); 
+    game->containsWalls = numOfWalls > 0;
+    game->numOfWalls = numOfWalls;
+
+    //walls
+    if(game->containsWalls)
+    {   
+        game->walls = malloc(sizeof(Coord) * numOfWalls);
+        if (game->walls == NULL) 
+        {
+            printf("Error: Memory allocation for walls failed\n");
+            return;
+        }
+
+        memcpy(game->walls, ptr, sizeof(Coord) * numOfWalls);
+    }    
+}
+
 size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
 {
-    if (game == NULL) {
-    fprintf(stderr, "Error: GameInfo is NULL\n");
-    return 0;
+    if (game == NULL) 
+    {
+        fprintf(stderr, "Error: GameInfo is NULL\n");
+        return 0;
     }
     size_t size = 0, appleListSize;
     size_t playerListSize[game->numOfCurPLayers];
@@ -17,9 +87,10 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
     size += appleListSize + sizeof(int) * 6;
 
     *buffer = malloc(size);
-    if (*buffer == NULL) {
-    perror("malloc failed");
-    return 0;
+    if (*buffer == NULL) 
+    {
+        perror("malloc failed");
+        return 0;
     }
     char* ptr = *buffer;
 

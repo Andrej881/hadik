@@ -191,5 +191,6 @@ int main(int argc, char *argv[]) {
     }    
 	
     close(info.sockfd);
+    RemoveGame(&info.game);
     return 0;
 }

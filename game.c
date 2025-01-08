@@ -1,17 +1,127 @@
 #include "game.h"
 
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls)
+{    
+    game->running = true;
+    game->numOfAddedTraps = 0;
+    game->numOfPlayers = numOfplayers;
+    game->width = width;
+    game->height = height;
+    game->runningTime = 0;
+    game->containsWalls = walls;
+    game->gameDuration = gameDuration;
+    game->numOfWalls = (width*height)/16;
+    if(game->numOfWalls <= 0)
+        game->numOfWalls = 1;
+    if(gameDuration > 0)
+    {
+        game->timeEnd = true;
+    }  
+    else
+    {
+        game->timeEnd = false;
+    }  
+
+    game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
+    CreatList(&game->apples, 10, sizeof(Coord));        
+    game->numOfCurPLayers = 0;
+    if(walls)
+    {
+        GenerateWalls(game);
+    }
+}
+
+int CreateGameFromFile(GameInfo* game, const char* path)
+{   
+    printf("loading from file: %s\n", path);
+    FILE* file = fopen(path, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return -1;
+    }
+    int numOfPlayers, width, height, gameDuration, numOfWalls;
+    if (fscanf(file, "%d %d %d %d %d",
+               &numOfPlayers,
+               &width,
+               &height,
+               &gameDuration,
+               &numOfWalls) != 5) {
+        printf("Error reading game info\n");
+        fclose(file);
+        return -2;
+    }
+
+    CreateGame(game, numOfPlayers, width, height, gameDuration, false);
+    game->numOfWalls = numOfWalls;
+    if (game->numOfWalls > 0) {
+        game->containsWalls = true;
+        game->walls = malloc(sizeof(Coord) * game->numOfWalls);
+        if (game->walls == NULL) {
+            perror("Error allocating memory for walls");
+            fclose(file);
+            return -3;
+        }
+
+        for (int i = 0; i < game->numOfWalls; ++i) {
+            if (fscanf(file, "%d %d", &game->walls[i].x, &game->walls[i].y) != 2) {
+                printf("Error reading wall coordinates[%d] [%d]\n", game->walls[i].x, game->walls[i].y);
+                free(game->walls);
+                fclose(file);
+                return -4;
+            }
+        }
+    } else {
+        game->walls = NULL;
+    }
+    fclose(file);
+    return 0;
+}
+
+int SaveGameSetUp(GameInfo* game, const char* filePath)
+{
+    FILE* file = fopen(filePath, "w");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(EXIT_FAILURE);
+    }
+    if(fprintf(file, "%d %d %d %d %d ",
+    game->numOfPlayers,
+    game->width,
+    game->height,
+    game->gameDuration,
+    game->containsWalls ? game->numOfWalls : 0) < 5)
+    {
+        printf("Error writing game info\n");
+        fclose(file);
+        return -1;
+    } 
+
+    if (game->numOfWalls > 0) {
+
+        for (int i = 0; i < game->numOfWalls; ++i) {
+            if (fprintf(file, "%d %d ", game->walls[i].x, game->walls[i].y) < 2) {
+                printf("Error writing wall coordinates\n");
+                fclose(file);
+                return -2;
+            }
+        }
+    } 
+    fclose(file);
+    return 0;
+}
+
 void GenerateWalls(GameInfo* game)
 {       
-    game->walls = malloc(((game->width * game->height)/4) * sizeof(Coord));
+    game->walls = malloc(game->numOfWalls * sizeof(Coord));
     int map[game->width][game->height];
     memset(map, 0, sizeof(map));
 
-    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    for (int i = 0; i < game->numOfWalls; ++i)
     {
         game->walls[i].x = -1;
         game->walls[i].y = -1;
     }
-    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    for (int i = 0; i < game->numOfWalls; ++i)
     {
         Coord coord;
         while(1)
@@ -80,41 +190,14 @@ bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height]
 
 bool ContainsWall(GameInfo* game,int y, int x)
 {
-    for (int i = 0; i < (game->width * game->height)/4; ++i)
+    for (int i = 0; i < game->numOfWalls; ++i)
     {
-        if(game->walls[i].x = x && game->walls[i].y == y)
+        if(game->walls[i].x == x && game->walls[i].y == y)
         {
             return true;
         }
     }
     return false;
-}
-
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls)
-{    
-    game->numOfAddedTraps = 0;
-    game->numOfPlayers = numOfplayers;
-    game->width = width;
-    game->height = height;
-    game->runningTime = 0;
-    game->containsWalls = walls;
-    if(gameDuration > 0)
-    {
-        game->gameDuration = gameDuration;
-        game->timeEnd = true;
-    }  
-    else
-    {
-        game->timeEnd = false;
-    }  
-
-    game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
-    CreatList(&game->apples, 10, sizeof(Coord));        
-    game->numOfCurPLayers = 0;
-    if(walls)
-    {
-        GenerateWalls(game);
-    }
 }
 
 int AddPlayer(GameInfo* game)
@@ -130,15 +213,20 @@ int AddPlayer(GameInfo* game)
     Coord head;
     while(findingSpace)
     {
+        findingSpace = false;
         head.x = rand() % game->width;
         head.y = rand() % game->height;
-        if(ContainsPlayerHead(game, head.x, head.y, -1) == 0)
+        if(ContainsPlayerHead(game, head.x, head.y, -1) != 0)
         {
-            findingSpace = false;
+            findingSpace = true;
         }
-        if(ContainsPlayerBody(game, head.x, head.y, -1) == 0)
+        else if(ContainsPlayerBody(game, head.x, head.y, -1) != 0)
         {
-            findingSpace = false;
+            findingSpace = true;
+        }
+        else if(game->containsWalls && ContainsWall(game, head.x, head.y))
+        {
+            findingSpace = true;
         }
     }
     CreatePlayer(&game->players[freeIndex].player, head);
@@ -174,6 +262,10 @@ bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player)
     {
         return true;
     }
+    if (game->containsWalls && ContainsWall(game, head.y, head.x))
+    {
+        return true;
+    }
     return false;
 }
 
@@ -182,11 +274,34 @@ void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
     if(player->player.dead)
         return;
     Coord coord = Move(&player->player);   
-
-    player->player.head.x = player->player.head.x < 0 ? game->width-1 : player->player.head.x;    
-    player->player.head.y = player->player.head.y < 0 ? game->height-1 : player->player.head.y;
-    player->player.head.x = player->player.head.x >= game->width ? 0 : player->player.head.x;   
-    player->player.head.y = player->player.head.y >= game->height ? 0 : player->player.head.y;
+    if(player->player.head.x < 0)
+    {
+        if(game->containsWalls)
+            player->player.dead = true;
+        else        
+            player->player.head.x = game->width - 1;
+    }        
+    if(player->player.head.y < 0)
+    {
+        if(game->containsWalls)
+            player->player.dead = true;
+        else        
+            player->player.head.y = game->height - 1;
+    } 
+    if(player->player.head.x >= game->width)
+    {
+        if(game->containsWalls)
+            player->player.dead = true;
+        else        
+            player->player.head.x = 0;
+    }     
+    if(player->player.head.y >= game->height)
+    {
+        if(game->containsWalls)
+            player->player.dead = true;
+        else        
+            player->player.head.y = 0;
+    } 
 
     if (GameCheckCollisionWithPlayers(game, player))
     {
@@ -205,8 +320,17 @@ void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
 void GenerateApple(GameInfo* game)
 {
     Coord apple;
-    apple.x = rand() % game->width;        
-    apple.y = rand() % game->height;
+    while(1)
+    {
+        apple.x = rand() % game->width;        
+        apple.y = rand() % game->height;
+        if(ContainsPlayerHead(game, apple.y, apple.x, -1) || ContainsPlayerBody(game, apple.y, apple.x, -1) || ContainsApple(game, apple.y, apple.x, NULL) || (game->containsWalls && ContainsWall(game, apple.y, apple.x)))
+        {
+            continue;
+        }
+        break;
+    }
+
     AddList(&game->apples, &apple);
 }
 
@@ -225,46 +349,69 @@ void RemoveGame(GameInfo* game)
         game->walls = NULL;
     }
 }
-
+void AddTime(GameInfo* game ,time_t time)
+{
+    game->runningTime += time;
+    if(game->timeEnd && game->runningTime >= game->gameDuration)
+        game->running = false;
+}
 void DrawGame(GameInfo* game, int playerIndex)
 {          
     system("clear");
     if (playerIndex >= 0)
         printf("Score: %d\tTime %ld\n", game->players[playerIndex].player.bodyParts.end, game->runningTime);
-    for(int i = 0; i < game->height; ++i)
+    for(int i = -1; i <= game->height; ++i)
     {        
+        if(i == -1 || i == game->height)
+        {
+            for (int j = -1; j <= game->width; ++j)
+            {
+                printf("# ");
+            }
+            printf("\n");
+            continue;
+        }
         if(playerIndex >= 0 && game->players[playerIndex].player.dead && i == game->height / 2 - 3)
         {
             printf("\tYou died\n\tFinalScore [%d]\n\tPress Enter to play again\n\tPress q to leave\n", game->players[playerIndex].player.bodyParts.end);
             continue;
         }
-        for(int j = 0; j < game->width; ++j)
+        for(int j = -1; j <= game->width; ++j)
         {    
+            if(j == -1 || j == game->width)
+            {
+                printf("# ");
+                continue;
+            }
             int headTest = ContainsPlayerHead(game, i, j, playerIndex);
             int bodyTest = ContainsPlayerBody(game, i, j, playerIndex);
             if(headTest == 1)
             {
-                printf("Q");
+                printf("Q ");
             }
             else if(headTest == -1)
             {
-                printf("@");
+                printf("@ ");
             }
             else if(bodyTest == 1)
             {
-                printf("U");
+                printf("U ");
             }
             else if(bodyTest == -1)
             {
-                printf("O");
+                printf("O ");
             }
             else if(ContainsApple(game, i, j, NULL))
             {
-                printf("#");
+                printf("* ");
+            }
+            else if(game->containsWalls && ContainsWall(game, i, j))
+            {
+                printf("# ");
             }
             else
             {
-                printf(" ");
+                printf("  ");
             }
         }
         printf("\n");
@@ -346,6 +493,10 @@ void PrintGameContent(GameInfo* game)
     for (int i = 0;i < game->numOfCurPLayers; ++i)
     {
         PrintPlayer(&game->players[i].player);        
+    }
+    for (int i = 0;i < game->numOfWalls; ++i)
+    {
+        printf("Wall-[%d %d]\n",game->walls[i].x, game->walls[i].y);        
     }
 }
 

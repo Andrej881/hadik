@@ -16,81 +16,89 @@ void ResetTerminal(struct termios *original) {
 
 int NewGame(ClientGameInfo* info, int port)
 {    
-    int num;
-    while (1) {
-        printf("Write Num of players: \n");
-        if (scanf("%d", &num) == 1) {
-            if (num > 0) {
-                break; 
-            } else {
-                printf("Must be greater than 0!\n");
-            }
-        } else {
-            printf("Invalid input! Please enter a number.\n");
-                
-            while (getchar() != '\n');
-        }
-    }    
-
-    int width;
-    while (1) {
-        printf("Write Width: \n");
-        if (scanf("%d", &width) == 1) {
-            if (width > 0) {
-                break; 
-            } else {
-                printf("Must be greater than 0!\n");
-            }
-        } else {
-            printf("Invalid input! Please enter a number.\n");
-                
-            while (getchar() != '\n');
-        }
-    }  
-
-    int height;
-    while (1) {
-        printf("Write Height: \n");
-        if (scanf("%d", &height) == 1) {
-            if (height > 0) {
-                break; 
-            } else {
-                printf("Must be greater than 0!\n");
-            }
-        } else {
-            printf("Invalid input! Please enter a number.\n");
-                
-            while (getchar() != '\n');
-        }
-    }   
-
-    int gameTime;
-    while (1) {
-        printf("Write Time in which game should end(0 means it ends only when there are no players): \n");
-        if (scanf("%d", &gameTime) == 1) {
-            if (gameTime >= 0) {
-                break; 
-            } else {
-                printf("Must be greater or equal to 0!\n");
-            }
-        } else {
-            printf("Invalid input! Please enter a number.\n");
-                
-            while (getchar() != '\n');
-        }
-    }   
-
-    char gameWalls[2];
-    bzero(&gameWalls,2);
-    printf("Write 1 if you want map with walls: \n");
-    scanf("%s", &gameWalls);       
-    
-    char numStr[12], widthStr[12], heightStr[12], portStr[12], gameTimeStr[12];
-    snprintf(numStr, sizeof(numStr), "%d", num);
-    snprintf(widthStr, sizeof(widthStr), "%d", width);
-    snprintf(heightStr, sizeof(heightStr), "%d", height);
+    int num, width, height, gameTime;    
+    char gameWalls[2], filePath[250], portStr[12];
     snprintf(portStr, sizeof(portStr), "%d", port);
-    snprintf(gameTimeStr, sizeof(gameTimeStr), "%d", gameTime);
+
+    printf("Write 0 if you want to load from file\n");
+    int file;
+    scanf("%d", &file);
+    if (file != 0)
+    {
+        while (1) {
+            printf("Write Num of players: \n");
+            if (scanf("%d", &num) == 1) {
+                if (num > 0) {
+                    break; 
+                } else {
+                    printf("Must be greater than 0!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                    
+                while (getchar() != '\n');
+            }
+        }    
+
+        while (1) {
+            printf("Write Width: \n");
+            if (scanf("%d", &width) == 1) {
+                if (width > 0) {
+                    break; 
+                } else {
+                    printf("Must be greater than 0!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                    
+                while (getchar() != '\n');
+            }
+        }  
+
+        while (1) {
+            printf("Write Height: \n");
+            if (scanf("%d", &height) == 1) {
+                if (height > 0) {
+                    break; 
+                } else {
+                    printf("Must be greater than 0!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                    
+                while (getchar() != '\n');
+            }
+        }   
+
+        while (1) {
+            printf("Write Time in which game should end(0 means it ends only when there are no players): \n");
+            if (scanf("%d", &gameTime) == 1) {
+                if (gameTime >= 0) {
+                    break; 
+                } else {
+                    printf("Must be greater or equal to 0!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                    
+                while (getchar() != '\n');
+            }
+        }   
+
+        bzero(gameWalls,2);
+        printf("Write 1 if you want map with walls: \n");
+        scanf("%s", gameWalls);       
+        
+        
+    }
+    else
+    {
+        bzero(filePath,250);
+        printf("Write Path \n");
+        scanf("%s", filePath);
+    }
+
+    
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -100,19 +108,40 @@ int NewGame(ClientGameInfo* info, int port)
         // Server
         printf("Spúšťam server v detskom procese...\n");
 
-        
         char *server_path = "./server";
-        char *args[] = {server_path, portStr, numStr, widthStr, heightStr, gameTimeStr, gameWalls, NULL};
+        if(file != 0)
+        {
+            char numStr[12], widthStr[12], heightStr[12], gameTimeStr[12];
+            snprintf(numStr, sizeof(numStr), "%d", num);
+            snprintf(widthStr, sizeof(widthStr), "%d", width);
+            snprintf(heightStr, sizeof(heightStr), "%d", height);
+            snprintf(gameTimeStr, sizeof(gameTimeStr), "%d", gameTime);
+            
+            char *args[] = {server_path, portStr, numStr, widthStr, heightStr, gameTimeStr, gameWalls, NULL};
 
-        if (execvp(server_path, args) < 0) {
-            perror("execvp failed");
-            return -2;
+            if (execvp(server_path, args) < 0) 
+            {
+                perror("execvp failed");
+                return -2;        
+            }
         }
+        else
+        {
+            char *args[] = {server_path, portStr, filePath, NULL};
+            if (execvp(server_path, args) < 0) 
+            {
+                perror("execvp failed");
+                return -2;        
+            }
+        }
+
+        
+
+        
     } else {
         // Klient
         bool contain = gameWalls[0] == '1';
-        CreateGame(&info->game, num, width, height, gameTime, contain);
-        usleep(2000000);
+        sleep(3);
         return JoinGame(info, port, "127.0.0.1");
     }
 
@@ -121,8 +150,6 @@ int NewGame(ClientGameInfo* info, int port)
 
 int JoinGame(ClientGameInfo* info, int port, const char* ip)
 {    
-    CreateGame(&info->game, 5, 30, 15, 0, false);
-
     info->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (info->sockfd < 0) {
         printf("ERROR opening socket");
@@ -143,6 +170,9 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
         printf("ERROR connecting");
         return -3;
     }
+    char buffer[MAX_BUF];
+    int test = recv(info->sockfd, buffer, MAX_BUF, 0);
+    DeserializeInitMessage(buffer, &info->game);
 
     printf("Connected to server\n");
     return 0;
@@ -155,7 +185,7 @@ void* DrawToClient(void* args)
     int running = true;
     while(running)
     {  
-        usleep(166670);
+        usleep(200000);
         bzero(buffer, MAX_BUF);
         size_t bufferSize;
         // Receive the serialized data
