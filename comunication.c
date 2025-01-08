@@ -22,7 +22,7 @@ void SerializeInitMessage(char* buffer, GameInfo* game)
     ptr += sizeof(int);
 
     //numOfWalls
-    memcpy(ptr, &game->numOfWalls, sizeof(int));    
+    memcpy(ptr, &game->numOfWalls, sizeof(int));  
     ptr += sizeof(int);
 
     //walls    

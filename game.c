@@ -10,9 +10,6 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     game->runningTime = 0;
     game->containsWalls = walls;
     game->gameDuration = gameDuration;
-    game->numOfWalls = (width*height)/16;
-    if(game->numOfWalls <= 0)
-        game->numOfWalls = 1;
     if(gameDuration > 0)
     {
         game->timeEnd = true;
@@ -26,9 +23,14 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     CreatList(&game->apples, 10, sizeof(Coord));        
     game->numOfCurPLayers = 0;
     if(walls)
-    {
+    {        
+        game->numOfWalls = (width*height)/16;
+        if(game->numOfWalls <= 0)
+            game->numOfWalls = 1;
         GenerateWalls(game);
     }
+    else
+        game->numOfWalls = 0;
 }
 
 int CreateGameFromFile(GameInfo* game, const char* path)
@@ -371,7 +373,7 @@ void DrawGame(GameInfo* game, int playerIndex)
             printf("\n");
             continue;
         }
-        if(playerIndex >= 0 && game->players[playerIndex].player.dead && i == game->height / 2 - 3)
+        if(playerIndex >= 0 && game->players[playerIndex].player.dead && i == game->height / 2 - 2)
         {
             printf("\tYou died\n\tFinalScore [%d]\n\tPress Enter to play again\n\tPress q to leave\n", game->players[playerIndex].player.bodyParts.end);
             continue;
