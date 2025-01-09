@@ -187,26 +187,26 @@ bool IsConnected(GameInfo* game,int cY, int cX, int map[game->width][game->heigh
     int BFSbuffer[(game->height * game->width)][2];
     int start = 0, end = 0;
 
-    int start_x = -1, start_y = -1;
+    int startX = -1, startY = -1;
     for(int i = 0; i < game->height; ++i)
     {
         for(int j = 0; j < game->width; ++j)
         {
             if(map[j][i] == 0)
             {
-                start_x = j;
-                start_y = i;
+                startX = j;
+                startY = i;
                 numOfVisitedPlaces++;
                 break;
             }
         }
-        if(start_x != -1)
+        if(startX != -1)
             break;
     }
 
-    visited[start_x][start_y] = 1;
-    BFSbuffer[end][0] = start_x;
-    BFSbuffer[end++][1] = start_y;
+    visited[startX][startY] = 1;
+    BFSbuffer[end][0] = startX;
+    BFSbuffer[end++][1] = startY;
 
     Coord dir[] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
 
