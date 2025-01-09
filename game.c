@@ -30,7 +30,10 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
         GenerateWalls(game);
     }
     else
+    {
         game->numOfWalls = 0;
+        game->walls = NULL;
+    }
 }
 
 int CreateGameFromFile(GameInfo* game, const char* path)
@@ -300,23 +303,23 @@ void MovePlayer(GameInfo* game, PlayerArrayInfo* player)
     if(player->player.head.y >= game->height)
     {
         if(game->containsWalls)
-            player->player.dead = true;
+            player->player.dead = true;  
         else        
             player->player.head.y = 0;
     } 
 
     if (GameCheckCollisionWithPlayers(game, player))
     {
-        player->player.dead = true;
+        player->player.dead = true;    
     }
     int appleIndex;
     if (ContainsApple(game, player->player.head.y, player->player.head.x, &appleIndex))
     {
         AddPart(&player->player, coord);
-        RemoveList(&game->apples, appleIndex);
+        free(RemoveList(&game->apples, appleIndex));
         if(game->apples.end < game->numOfCurPLayers)
             GenerateApple(game);
-    }
+    }   
 }
 
 void GenerateApple(GameInfo* game)

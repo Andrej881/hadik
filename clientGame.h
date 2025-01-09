@@ -18,12 +18,14 @@ typedef struct ClientGameInfo
     bool running;
     bool dead;
     int sockfd;
+    char * inputBuff;
     struct sockaddr_in serv_addr;
     GameInfo game;
     pthread_t * threads;
-    pthread_mutex_t mutex;
+    pthread_mutex_t mutex, inputMutex;
 } ClientGameInfo;
 
+void* SendDataToServer(void* args);
 void SetupTerminal(struct termios *original);
 void ResetTerminal(struct termios *original);
 int NewGame(ClientGameInfo* info, int port);

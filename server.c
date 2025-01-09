@@ -10,6 +10,12 @@
 
 #include "comunication.h"
 
+typedef struct Message
+{
+    Direction dir[2];
+    int num;
+} Message;
+
 typedef struct ServerInfo{
     int sockfd, newsockfd;
     struct sockaddr_in serv_addr, cli_addr;
@@ -27,6 +33,7 @@ typedef struct ServerPlayer{
     bool * activePlayers;
     bool ended;
     bool paused;
+    Direction direction;
 } ServerPlayer;
 
 typedef struct ServerSendingThread{
@@ -40,6 +47,7 @@ void* readPlayerDirection(void* args)
     ServerPlayer* serverPLayer = (ServerPlayer*) args;
 
     char buffer[10000];
+    bzero(buffer, 1000);
     int n;
 	char lastCh = 'd';
 	char ch;
@@ -50,9 +58,10 @@ void* readPlayerDirection(void* args)
 
     SerializeInitMessage(buffer, serverPLayer->game);
     send(serverPLayer->client_sock, buffer, 10000, 0);
-    serverPLayer->activePlayers[serverPLayer->player_id] = true;
     
     serverPLayer->index = AddPlayer(serverPLayer->game);
+    serverPLayer->direction = serverPLayer->game->players[serverPLayer->index].player.curDir;
+    serverPLayer->paused = false;
     int curNum = serverPLayer->game->numOfCurPLayers;
     if (serverPLayer->index == -1)
     {   
@@ -104,18 +113,15 @@ void* readPlayerDirection(void* args)
                 serverPLayer->paused = !serverPLayer->paused;
                 usleep(100000);
             }else if (ch == 'w' && !serverPLayer->paused) {
-                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, UP);
+                serverPLayer->direction = UP;
             } else if (ch == 's' && !serverPLayer->paused) {
-                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, DOWN);
+                serverPLayer->direction = DOWN;
             } else if (ch == 'a' && !serverPLayer->paused) {
-                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, LEFT);
+                serverPLayer->direction = LEFT;
             } else if (ch == 'd' && !serverPLayer->paused) {
-                TryChangeDir(&serverPLayer->game->players[serverPLayer->index].player, RIGHT);
+                serverPLayer->direction = RIGHT;
             }
-        }      
-        
-        if(!serverPLayer->paused)
-            MovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);            
+        }                    
 	        
         if(serverPLayer->index > *serverPLayer->removedIndex && curNum > serverPLayer->game->numOfCurPLayers)
         {
@@ -124,8 +130,7 @@ void* readPlayerDirection(void* args)
         }   
         //DrawGame(serverPLayer->game,-1);
         pthread_mutex_unlock(serverPLayer->gameMutex);
-        lastCh = ch;
-        //usleep(200000);        
+        lastCh = ch;     
     }
 
     close(serverPLayer->client_sock);    
@@ -141,9 +146,23 @@ void* sendGameData(void* args)
     time_t start = time(NULL), passed = 0;
     while(running)
     {      
+
         start = time(NULL);
         bool tmp = false;
-        pthread_mutex_lock(data->players[0].gameMutex);     
+        
+        pthread_mutex_lock(data->players[0].gameMutex);  
+        while (*data->players[0].waiting) {
+            pthread_cond_wait(data->players[0].waitCondition, data->players[0].gameMutex);
+        }
+        for (int i = 0; i < data->numOfPlayers; ++i)
+        {
+            if (!data->players[i].paused && data->players[0].activePlayers[i])
+            {                
+                TryChangeDir(&data->players[i].game->players[data->players[i].index].player, data->players[i].direction);
+                MovePlayer(data->players[i].game, &data->players[i].game->players[data->players[i].index]);
+            }
+        }              
+        
         if(data->players[0].game->running == false)
         {
             pthread_mutex_unlock(data->players[0].gameMutex);
@@ -154,6 +173,10 @@ void* sendGameData(void* args)
             pthread_mutex_unlock(data->players[0].gameMutex); 
             break;
         }
+        
+        char* buff = NULL;
+        size_t bufferSize = SerializeServerMessage(&buff, data->players[0].game);
+        //DrawGame(data->players[i].game, -1);
         for (int i = 0; i < data->numOfPlayers; ++i)
         {
             if(!data->players[0].activePlayers[i])
@@ -162,17 +185,18 @@ void* sendGameData(void* args)
             {
                 running = true;
                 tmp = true;
-                char* buff;
-                size_t bufferSize = SerializeServerMessage(&buff, data->players[i].game, data->players[i].index);
+                char* ptr = buff;
+                ptr += bufferSize - sizeof(int);
+                memcpy(ptr, &data->players[i].index, sizeof(int));
                 //DrawGame(data->players[i].game, -1);
-                send(data->players[i].client_sock, buff, bufferSize, 0);
-                free(buff);
+                send(data->players[i].client_sock, buff, bufferSize, 0);                
             }
             else if(!tmp)
             {
                 running = false;
             }
         }   
+        free(buff);
         AddTime(data->players[0].game, passed);
         pthread_mutex_unlock(data->players[0].gameMutex);
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
@@ -290,7 +314,7 @@ int main(int argc, char *argv[]) {
         players[i].game = &game;  
         players[i].removedIndex = &removedIndex;  
         players[i].ended = false;
-        players[i].paused = false;
+        players[i].paused = true;
         players[i].activePlayers = activePlayers;
         players[i].gameMutex = &gameMutex;
         players[i].waitCondition = &waitCond;
@@ -377,7 +401,6 @@ int main(int argc, char *argv[]) {
 
             if (pthread_create(&threads[currentPlayer], NULL, &readPlayerDirection, &players[currentPlayer]) != 0) {
                 perror("Error creating thread\n");
-                activePlayers[currentPlayer] = false;
                 close(newsockfd);
                 continue;
             }
@@ -400,13 +423,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /*printf("[SendData] %ld\n", threads[numOfPlayers]);
+    printf("[SendData] %ld\n", threads[numOfPlayers]);
     pthread_join(threads[numOfPlayers], NULL);
     for (int i = 0; i <= maxActiveThreads && i < numOfPlayers; i++) {
         printf("[%d] %ld\n",i, threads[i]);
         fflush(NULL);
         pthread_join(threads[i], NULL);
-    }*/
+    }
+
     close(serverInfo.sockfd);
     SaveGameSetUp(&game,"LastGame");
     RemoveGame(&game);

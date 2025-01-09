@@ -69,7 +69,7 @@ void DeserializeInitMessage(char* buffer, GameInfo* game)
     }    
 }
 
-size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
+size_t SerializeServerMessage(char** buffer, GameInfo* game)
 {
     if (game == NULL) 
     {
@@ -81,10 +81,10 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
         playerListSize[i] = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;
-        size += playerListSize[i] + sizeof(int) * (4 + 2) + sizeof(bool) + sizeof(time_t);
+        size += playerListSize[i] + sizeof(int) * (4 + 2) + sizeof(bool);
     }
     appleListSize = game->apples.capacity * game->apples.elementSize;
-    size += appleListSize + sizeof(int) * 6;
+    size += appleListSize + sizeof(int) * 6 + sizeof(time_t);
 
     *buffer = malloc(size);
     if (*buffer == NULL) 
@@ -93,14 +93,9 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
         return 0;
     }
     char* ptr = *buffer;
-
     
     memcpy(ptr, &game->runningTime, sizeof(time_t));
     ptr += sizeof(time_t);
-
-    //playerIndex
-    memcpy(ptr, &playerIndex, sizeof(int));
-    ptr += sizeof(int);
 
     //numOfCurPlayers
     memcpy(ptr, &game->numOfCurPLayers, sizeof(int));
@@ -149,17 +144,15 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game, int playerIndex)
 void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 {
     char* ptr = buffer;    
-    
+    int numOfcur = game->numOfCurPLayers;
     memcpy(&game->runningTime, ptr, sizeof(time_t));
     ptr += sizeof(time_t);
-    //playerIndex
-    memcpy(playerIndex, ptr, sizeof(int));
-    ptr += sizeof(int);
     //curPlayers
     memcpy(&game->numOfCurPLayers, ptr, sizeof(int));
     ptr += sizeof(int);
+
     for (int i = 0; i < game->numOfCurPLayers; ++i)
-    {
+    {        
         //Head   
         memcpy(&game->players[i].player.head, ptr, sizeof(Coord));
         ptr += sizeof(Coord);
@@ -178,8 +171,18 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
         ptr += sizeof(int);
 
         // Allocate memory for List elements and deserialize
-        size_t listSize = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;
+        size_t listSize = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;        
+        if(game->players[i].player.bodyParts.elements != NULL)
+        {
+            free(game->players[i].player.bodyParts.elements);
+            game->players[i].player.bodyParts.elements = NULL;
+        }
         game->players[i].player.bodyParts.elements = malloc(listSize);
+        if(game->players[i].player.bodyParts.elements == NULL)
+        {
+            printf("Fockin NULL you minecraft picture\n");
+            exit(EXIT_FAILURE);
+        }
         memcpy(game->players[i].player.bodyParts.elements, ptr, listSize);
         ptr += listSize;
     }
@@ -199,6 +202,15 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 
     //List elements
     size_t listSize = game->apples.capacity * game->apples.elementSize;
+    if(game->apples.elements != NULL)
+    {
+        free(game->apples.elements);
+        game->apples.elements = NULL;
+    }
     game->apples.elements = malloc(listSize);
     memcpy(game->apples.elements, ptr, listSize);
+    ptr += listSize;
+
+    //playerIndex
+    memcpy(playerIndex, ptr, sizeof(int));
 }

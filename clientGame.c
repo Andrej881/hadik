@@ -155,7 +155,6 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
         printf("ERROR opening socket");
         return -1;
     }
-
     bzero((char *) &info->serv_addr, sizeof(info->serv_addr));
     info->serv_addr.sin_family = AF_INET;
     info->serv_addr.sin_port = htons(port);
@@ -170,9 +169,9 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
         printf("ERROR connecting");
         return -3;
     }
-    char buffer[MAX_BUF];
-    int test = recv(info->sockfd, buffer, MAX_BUF, 0);
-    DeserializeInitMessage(buffer, &info->game);
+    char buff[MAX_BUF];
+    int test = recv(info->sockfd, buff, MAX_BUF, 0);
+    DeserializeInitMessage(buff, &info->game);
 
     printf("Connected to server\n");
     return 0;
@@ -185,7 +184,6 @@ void* DrawToClient(void* args)
     int running = true;
     while(running)
     {  
-        usleep(200000);
         bzero(buffer, MAX_BUF);
         size_t bufferSize;
         // Receive the serialized data
@@ -222,37 +220,50 @@ void* DrawToClient(void* args)
         running = info->running; 
         pthread_mutex_unlock(&info->mutex);
     }
-    
+    pthread_exit(NULL);    
 }
 
-void* ManageInputs(void* args)
+void* SendDataToServer(void* args)
 {
-    ClientGameInfo* info = (ClientGameInfo*) args;
-    char buffer[MAX_BUF];
-	char lastCh = 'd'; 
     int n;
-    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
-    while (info->running) {  
-        usleep(200000);  
-        char ch;
-        if(read(STDIN_FILENO, &ch, 1) == 1)
-		{
-            lastCh = ch;
-		}        
-		bzero(buffer, MAX_BUF);  
-        buffer[0] = lastCh;
-        if (buffer[0] == 'q') {
+    ClientGameInfo* info = (ClientGameInfo*) args;
+    while (info->running) {    
+        //usleep(200000);    
+        pthread_mutex_lock(&info->inputMutex);
+        
+        if (info->inputBuff[0] == 'q') {
             pthread_mutex_lock(&info->mutex);
             if (info->dead)
                 info->running = false;  // Ukončenie programu            
             pthread_mutex_unlock(&info->mutex);
         } 
-        n = write(info->sockfd, buffer, strlen(buffer));
+        n = write(info->sockfd, info->inputBuff, strlen(info->inputBuff));
         if (n < 0) {            
             perror("ERROR writing to socket");
             return NULL;
         }
+        pthread_mutex_unlock(&info->inputMutex);        
     }
+    pthread_exit(NULL);
+}
+
+void* ManageInputs(void* args)
+{
+    ClientGameInfo* info = (ClientGameInfo*) args;
+	char lastCh = 'd'; 
+    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
+    while (info->running) {  
+        char ch;
+        if(read(STDIN_FILENO, &ch, 1) == 1)
+		{
+            lastCh = ch;
+		}        
+        pthread_mutex_lock(&info->inputMutex);
+		bzero(info->inputBuff, MAX_BUF);  
+        info->inputBuff[0] = lastCh;        
+        pthread_mutex_unlock(&info->inputMutex);
+    }
+    pthread_exit(NULL);
 }
 
 void Run(ClientGameInfo* info)
@@ -260,18 +271,19 @@ void Run(ClientGameInfo* info)
     printf("Running\n");
     info->running = true;
     info->dead = false;
-
+    info->inputBuff = calloc(MAX_BUF, sizeof(char));
     pthread_mutex_init(&info->mutex, NULL);
+    pthread_mutex_init(&info->inputMutex, NULL);
     
     SetupTerminal(&info->original);
 
-    info->threads = malloc(2 * sizeof(pthread_t));
+    info->threads = malloc(3 * sizeof(pthread_t));
 
     pthread_create(&info->threads[0], NULL, &ManageInputs, info);
-    usleep(200000);
-    pthread_create(&info->threads[1], NULL, &DrawToClient, info);
+    pthread_create(&info->threads[1], NULL, &SendDataToServer, info);
+    pthread_create(&info->threads[2], NULL, &DrawToClient, info);
     
-    for(int i = 0; i < 2; ++i)
+    for(int i = 0; i < 3; ++i)
     {
         pthread_join(info->threads[i], NULL);
     }
@@ -279,5 +291,10 @@ void Run(ClientGameInfo* info)
     ResetTerminal(&info->original);
     free(info->threads);
     info->threads = NULL;
+    free(info->inputBuff);
+    info->inputBuff = NULL;
+    RemoveGame(&info->game);
     pthread_mutex_destroy(&info->mutex);
+    pthread_mutex_destroy(&info->inputMutex);
+    close(info->sockfd);
 }
