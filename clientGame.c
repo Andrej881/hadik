@@ -16,8 +16,8 @@ void ResetTerminal(struct termios *original) {
 
 int NewGame(ClientGameInfo* info, int port)
 {    
-    int num, width, height, gameTime;    
-    char gameWalls[2], filePath[250], portStr[12];
+    int num, width, height, gameTime, gameWalls;    
+    char filePath[250], portStr[12];
     snprintf(portStr, sizeof(portStr), "%d", port);
 
     printf("Write 0 if you want to load from file\n");
@@ -85,9 +85,21 @@ int NewGame(ClientGameInfo* info, int port)
             }
         }   
 
-        bzero(gameWalls,2);
-        printf("Write 1 if you want map with walls: \n");
-        scanf("%s", gameWalls);       
+
+         while (1) {
+        printf("Write num of walls if you write 0 you have mode without walls: \n");
+            if (scanf("%d", &gameWalls) == 1) {
+                if (gameWalls >= 0) {
+                    break; 
+                } else {
+                    printf("Must be greater or equal to 0!\n");
+                }
+            } else {
+                printf("Invalid input! Please enter a number.\n");
+                    
+                while (getchar() != '\n');
+            }
+        }       
         
         
     }
@@ -111,13 +123,14 @@ int NewGame(ClientGameInfo* info, int port)
         char *server_path = "./server";
         if(file != 0)
         {
-            char numStr[12], widthStr[12], heightStr[12], gameTimeStr[12];
+            char numStr[12], widthStr[12], heightStr[12], gameTimeStr[12], gameWallsStr[12];
             snprintf(numStr, sizeof(numStr), "%d", num);
             snprintf(widthStr, sizeof(widthStr), "%d", width);
             snprintf(heightStr, sizeof(heightStr), "%d", height);
             snprintf(gameTimeStr, sizeof(gameTimeStr), "%d", gameTime);
+            snprintf(gameWallsStr, sizeof(gameWallsStr), "%d", gameWalls);
             
-            char *args[] = {server_path, portStr, numStr, widthStr, heightStr, gameTimeStr, gameWalls, NULL};
+            char *args[] = {server_path, portStr, numStr, widthStr, heightStr, gameTimeStr, gameWallsStr, NULL};
 
             if (execvp(server_path, args) < 0) 
             {
@@ -140,8 +153,7 @@ int NewGame(ClientGameInfo* info, int port)
         
     } else {
         // Klient
-        bool contain = gameWalls[0] == '1';
-        sleep(3);
+        sleep(1);
         return JoinGame(info, port, "127.0.0.1");
     }
 
@@ -171,6 +183,11 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
     }
     char buff[MAX_BUF];
     int test = recv(info->sockfd, buff, MAX_BUF, 0);
+    if(buff[0] == 'Q')
+    {
+        printf("Server is full\n");
+        return -4;
+    }
     DeserializeInitMessage(buff, &info->game);
 
     printf("Connected to server\n");
@@ -196,6 +213,15 @@ void* DrawToClient(void* args)
             continue;
         }
         test = recv(info->sockfd, buffer, MAX_BUF, 0);
+        if(buffer[0] == 'Q')
+        {
+            int index;
+            memcpy(&index, (buffer+1), sizeof(int));
+            PrintLeaderBoard(&info->game, index);
+            info->running = false;            
+            pthread_mutex_unlock(&info->mutex);
+            break;
+        }
         pthread_mutex_unlock(&info->mutex);
         if (test <= 0) {
             printf("Failed to receive serialized data %ld", test);            
@@ -268,7 +294,6 @@ void* ManageInputs(void* args)
 
 void Run(ClientGameInfo* info)
 {
-    printf("Running\n");
     info->running = true;
     info->dead = false;
     info->inputBuff = calloc(MAX_BUF, sizeof(char));
@@ -297,4 +322,5 @@ void Run(ClientGameInfo* info)
     pthread_mutex_destroy(&info->mutex);
     pthread_mutex_destroy(&info->inputMutex);
     close(info->sockfd);
+    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) & ~O_NONBLOCK);
 }

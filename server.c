@@ -33,13 +33,13 @@ typedef struct ServerPlayer{
     bool * activePlayers;
     bool ended;
     bool paused;
+    bool * end;
     Direction direction;
 } ServerPlayer;
 
 typedef struct ServerSendingThread{
     ServerPlayer * players;
     int numOfPlayers;
-    bool end;
 }ServerSendingThread;
 
 void* readPlayerDirection(void* args)
@@ -47,7 +47,7 @@ void* readPlayerDirection(void* args)
     ServerPlayer* serverPLayer = (ServerPlayer*) args;
 
     char buffer[10000];
-    bzero(buffer, 1000);
+    bzero(buffer, 10000);
     int n;
 	char lastCh = 'd';
 	char ch;
@@ -57,7 +57,7 @@ void* readPlayerDirection(void* args)
     pthread_mutex_lock(serverPLayer->gameMutex);
 
     SerializeInitMessage(buffer, serverPLayer->game);
-    send(serverPLayer->client_sock, buffer, 10000, 0);
+    send(serverPLayer->client_sock, buffer, 1000, 0);
     
     serverPLayer->index = AddPlayer(serverPLayer->game);
     serverPLayer->direction = serverPLayer->game->players[serverPLayer->index].player.curDir;
@@ -81,8 +81,8 @@ void* readPlayerDirection(void* args)
     while (running == 1) {    
 
         pthread_mutex_lock(serverPLayer->gameMutex);
-        if(serverPLayer->game->running == false)
-        {
+        if(*serverPLayer->end)
+        {        
             pthread_mutex_unlock(serverPLayer->gameMutex);
             break;
         }
@@ -111,7 +111,12 @@ void* readPlayerDirection(void* args)
                 *serverPLayer->removedIndex = RemovePlayer(serverPLayer->game, &serverPLayer->game->players[serverPLayer->index]);
             } else if(ch == 'p') {
                 serverPLayer->paused = !serverPLayer->paused;
-                usleep(100000);
+                if(serverPLayer->paused == false)
+                {
+                    *serverPLayer->waiting = true;
+                    sleep(3);
+                    *serverPLayer->waiting = false;
+                }
             }else if (ch == 'w' && !serverPLayer->paused) {
                 serverPLayer->direction = UP;
             } else if (ch == 's' && !serverPLayer->paused) {
@@ -133,54 +138,70 @@ void* readPlayerDirection(void* args)
         lastCh = ch;     
     }
 
+    pthread_mutex_lock(serverPLayer->gameMutex);
     close(serverPLayer->client_sock);    
     serverPLayer->activePlayers[serverPLayer->player_id] = false;
+    pthread_mutex_unlock(serverPLayer->gameMutex);
     printf("Player %d disconnected\n", serverPLayer->player_id);   
     pthread_exit(NULL);
 }
 
 void* sendGameData(void* args)
 {
+    sleep(1);
     ServerSendingThread* data = (ServerSendingThread*)args;
     bool running = true;
-    time_t start = time(NULL), passed = 0;
+    time_t start, passed = 0;
     while(running)
     {      
-
         start = time(NULL);
         bool tmp = false;
         
         pthread_mutex_lock(data->players[0].gameMutex);  
-        while (*data->players[0].waiting) {
+        /*while (*data->players[0].waiting) {
             pthread_cond_wait(data->players[0].waitCondition, data->players[0].gameMutex);
-        }
+        }*/
         for (int i = 0; i < data->numOfPlayers; ++i)
         {
-            if (!data->players[i].paused && data->players[0].activePlayers[i])
+            if (!data->players[i].paused && data->players[0].activePlayers[i] && *data->players[0].waiting == false)
             {                
                 TryChangeDir(&data->players[i].game->players[data->players[i].index].player, data->players[i].direction);
                 MovePlayer(data->players[i].game, &data->players[i].game->players[data->players[i].index]);
             }
         }              
         
-        if(data->players[0].game->running == false)
-        {
-            pthread_mutex_unlock(data->players[0].gameMutex);
-            break;
-        }
-        if(data->end)
+        if(*data->players[0].end)
         {            
             pthread_mutex_unlock(data->players[0].gameMutex); 
             break;
-        }
-        
+        }           
+            
         char* buff = NULL;
-        size_t bufferSize = SerializeServerMessage(&buff, data->players[0].game);
+        size_t bufferSize;
+        if(data->players[0].game->running == false)
+        {
+            for (int i = 0; i < data->numOfPlayers; ++i)
+            {
+                if(!data->players[0].activePlayers[i])
+                    continue;            
+                char buf[2 + sizeof(int)];
+                bzero(buf, 2+sizeof(int));
+                buf[0] = 'Q';
+                memcpy(buf + 1, &data->players[i].index, sizeof(int));
+                send(data->players[i].client_sock, buf, 2 + sizeof(int), 0);              
+            }
+            *data->players[0].end = true;
+            pthread_mutex_unlock(data->players[0].gameMutex);
+            break;
+        }
         //DrawGame(data->players[i].game, -1);
         for (int i = 0; i < data->numOfPlayers; ++i)
-        {
+        {                
             if(!data->players[0].activePlayers[i])
-                continue;
+                continue;  
+            else if(buff == NULL)               
+                bufferSize = SerializeServerMessage(&buff, data->players[0].game);  
+                                 
             if (!data->players[i].ended)
             {
                 running = true;
@@ -196,7 +217,8 @@ void* sendGameData(void* args)
                 running = false;
             }
         }   
-        free(buff);
+        if(buff != NULL)
+            free(buff);
         AddTime(data->players[0].game, passed);
         pthread_mutex_unlock(data->players[0].gameMutex);
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
@@ -211,8 +233,7 @@ int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
     bzero((char*)&serverInfo->serv_addr, sizeof(serverInfo->serv_addr));
     serverInfo->serv_addr.sin_family = AF_INET;
     serverInfo->serv_addr.sin_addr.s_addr = INADDR_ANY;
-    int newSocket = serverSocket;
-    serverInfo->serv_addr.sin_port = htons(newSocket);
+    serverInfo->serv_addr.sin_port = htons(serverSocket);
 
     serverInfo->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (serverInfo->sockfd < 0) {
@@ -220,11 +241,9 @@ int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
         return 1;
     }
 
-    while (bind(serverInfo->sockfd, (struct sockaddr*)&serverInfo->serv_addr, sizeof(serverInfo->serv_addr)) < 0) {
+    if (bind(serverInfo->sockfd, (struct sockaddr*)&serverInfo->serv_addr, sizeof(serverInfo->serv_addr)) < 0) {
         printf("Error binding socket address\n");
-        newSocket++;
-        printf("New socket [%d]\n", newSocket);
-        serverInfo->serv_addr.sin_port = htons(newSocket);
+        return 2;
     }
 
     listen(serverInfo->sockfd, numOfPlayers);  // Čakaj na pripojenie až `numOfPlayers` hráčov
@@ -267,16 +286,13 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
         int timeEnd = 0;
-        if (argc == 6)
+        if (argc >= 6)
         {
             timeEnd = atoi(argv[5]);
             timeEnd = timeEnd < 1 ? 0 : timeEnd;
         }
-        bool walls = false;
-        if (atoi(argv[6]) == 1)
-        {
-            walls = true;
-        }
+        int walls = 0;        
+        walls = atoi(argv[6]);
 
         CreateGame(&game, numOfPlayers, width, height, timeEnd, walls);
     }
@@ -298,14 +314,18 @@ int main(int argc, char *argv[]) {
     pthread_cond_init(&waitCond,NULL);
 
     ServerInfo serverInfo;
-    init(&serverInfo, atoi(argv[1]), numOfPlayers);//init socket
+    if(init(&serverInfo, atoi(argv[1]), numOfPlayers) != 0)//init socket
+    {
+        printf("Error creating server on port %d", atoi(argv[1]));
+        return(EXIT_FAILURE);
+    }
 
     bool activePlayers[numOfPlayers];
     pthread_t threads[numOfPlayers + 1]; //players + sending;
     int currentPlayer = 0;
     ServerPlayer players[numOfPlayers];
     ServerSendingThread data;
-    data.end = false;
+    bool end = false;
     data.players = players;
     data.numOfPlayers = numOfPlayers;
     bool waiting = true;
@@ -318,7 +338,8 @@ int main(int argc, char *argv[]) {
         players[i].activePlayers = activePlayers;
         players[i].gameMutex = &gameMutex;
         players[i].waitCondition = &waitCond;
-        
+        players[i].end = &end;
+
         players[i].waiting = &waiting;
 
         activePlayers[i] = false;
@@ -352,13 +373,13 @@ int main(int argc, char *argv[]) {
         }
 
         // Timer check: If active and no players joined in 10 seconds, shut down the server
-        if (timerActive) {
+        if (timerActive || end) {
             time_t currentTime = time(NULL);
             if (currentTime - timerStart >= 10) {
                 pthread_mutex_lock(&gameMutex);
-                data.end = true;
+                end = true;
                 pthread_mutex_unlock(&gameMutex);
-                printf("No players connected for 10 seconds. Server shutting down.\n");
+                printf("No players connected for 10 seconds or Game ended. Server shutting down.\n");
                 break;
             }
         }
@@ -382,6 +403,8 @@ int main(int argc, char *argv[]) {
 
             if (currentPlayer == -1) {
                 printf("Server full. Connection rejected.\n");
+                char buf[2] = {'Q', '\0'};
+                send(newsockfd, buf, 2, 0);
                 close(newsockfd);
                 continue;
             }
@@ -404,6 +427,7 @@ int main(int argc, char *argv[]) {
                 close(newsockfd);
                 continue;
             }
+            pthread_detach(threads[currentPlayer]);
         }
 
         // Check if all players have disconnected        
@@ -425,11 +449,6 @@ int main(int argc, char *argv[]) {
 
     printf("[SendData] %ld\n", threads[numOfPlayers]);
     pthread_join(threads[numOfPlayers], NULL);
-    for (int i = 0; i <= maxActiveThreads && i < numOfPlayers; i++) {
-        printf("[%d] %ld\n",i, threads[i]);
-        fflush(NULL);
-        pthread_join(threads[i], NULL);
-    }
 
     close(serverInfo.sockfd);
     SaveGameSetUp(&game,"LastGame");

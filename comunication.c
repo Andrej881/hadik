@@ -51,7 +51,7 @@ void DeserializeInitMessage(char* buffer, GameInfo* game)
     memcpy(&numOfWalls, ptr, sizeof(int));   
     ptr += sizeof(int);
     
-    CreateGame(game, numOfPlayers, width, height, 0, false); 
+    CreateGame(game, numOfPlayers, width, height, 0, 0); 
     game->containsWalls = numOfWalls > 0;
     game->numOfWalls = numOfWalls;
 
@@ -86,7 +86,7 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
     appleListSize = game->apples.capacity * game->apples.elementSize;
     size += appleListSize + sizeof(int) * 6 + sizeof(time_t);
 
-    *buffer = malloc(size);
+    *buffer = calloc(size,1);
     if (*buffer == NULL) 
     {
         perror("malloc failed");

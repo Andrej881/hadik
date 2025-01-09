@@ -1,6 +1,6 @@
 #include "game.h"
 
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls)
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration,int numOfWalls)
 {    
     game->running = true;
     game->numOfAddedTraps = 0;
@@ -8,7 +8,7 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     game->width = width;
     game->height = height;
     game->runningTime = 0;
-    game->containsWalls = walls;
+    game->containsWalls = numOfWalls > 0;
     game->gameDuration = gameDuration;
     if(gameDuration > 0)
     {
@@ -20,13 +20,15 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     }  
 
     game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
+    for (int i = 0; i < numOfplayers; ++i)
+    {
+        game->players[i].index = -1;
+    }
     CreatList(&game->apples, 10, sizeof(Coord));        
     game->numOfCurPLayers = 0;
-    if(walls)
-    {        
-        game->numOfWalls = (width*height)/16;
-        if(game->numOfWalls <= 0)
-            game->numOfWalls = 1;
+    if(numOfWalls > 0)
+    {     
+        game->numOfWalls = numOfWalls;
         GenerateWalls(game);
     }
     else
@@ -126,6 +128,8 @@ void GenerateWalls(GameInfo* game)
         game->walls[i].x = -1;
         game->walls[i].y = -1;
     }
+    Coord badCoords[game->width * game->height];
+    int numOfBadCoords = 0;
     for (int i = 0; i < game->numOfWalls; ++i)
     {
         Coord coord;
@@ -133,16 +137,49 @@ void GenerateWalls(GameInfo* game)
         {
             coord.x = rand() % game->width;
             coord.y = rand() % game->height;
-            if(!ContainsWall(game, coord.x, coord.y) && !IsConnected(game, coord.x, coord.y,map))
+            if(!ContainsWall(game, coord.y, coord.x) && IsConnected(game, coord.y, coord.x,map) && !CreatesDeadEnd(game, coord.x, coord.y, map))
                 break;
+            else
+            {           
+                bool add = true;     
+                for (int i = 0; i < numOfBadCoords; ++i)
+                {
+                    if(badCoords[i].x == coord.x && badCoords[i].y == coord.y)
+                        add = false;
+                }
+                if(add)
+                    badCoords[numOfBadCoords++] = coord;
+                if(numOfBadCoords >= game->width * game->height)
+                {
+                    printf("Cannot generate walls without making it unplayable Current walls:\n");
+                    for(int i = 0; i < game->height; ++i)
+                    {
+                        for (int j = 0; j < game->width; ++j)
+                        {
+                            printf("%d ",map[j][i]);
+                        }
+                        printf("\n");
+                    }
+                    return;
+                }
+            }
         }
         game->numOfAddedTraps++;
         game->walls[i] = coord;
-        map[coord.y][coord.x] = 1;
+        map[coord.x][coord.y] = 1;
     }
+    for(int i = 0; i < game->height; ++i)
+    {
+        for(int j = 0; j < game->width; ++j)
+        {
+            printf("%d ",map[j][i]);
+        }
+        printf("\n");
+    }
+    printf("\n");
 }
 
-bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height])
+bool IsConnected(GameInfo* game,int cY, int cX, int map[game->width][game->height])
 {
     int visited[game->width][game->height];    
     memset(visited, 0, sizeof(visited));
@@ -151,14 +188,14 @@ bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height]
     int start = 0, end = 0;
 
     int start_x = -1, start_y = -1;
-    for(int i = 0; i < game->width; ++i)
+    for(int i = 0; i < game->height; ++i)
     {
-        for(int j = 0; j < game->height; ++j)
+        for(int j = 0; j < game->width; ++j)
         {
-            if(map[i][j] == 0)
+            if(map[j][i] == 0)
             {
-                start_x = i;
-                start_y = j;
+                start_x = j;
+                start_y = i;
                 numOfVisitedPlaces++;
                 break;
             }
@@ -180,17 +217,47 @@ bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height]
         for(int i = 0; i < 4; ++i)
         {
             Coord nextDir = dir[i];
-            if(map[x + nextDir.x][y + nextDir.y] == 0 && nextDir.x >= 0 && nextDir.x < game->width && nextDir.y >= 0 && nextDir.y < game->height && visited[nextDir.x][nextDir.y] == 0)
+            int nextX = x + nextDir.x;
+            int nextY = y + nextDir.y;
+            if(map[nextX][nextY] == 0 && visited[nextX][nextY] == 0 && nextX >= 0 && nextX < game->width && nextY >= 0 && nextY < game->height && (nextX != cX || nextY != cY))
             {                            
-                BFSbuffer[end][0] = nextDir.x;
-                BFSbuffer[end++][1] = nextDir.y;
-                visited[nextDir.x][nextDir.y] = 1;
+                BFSbuffer[end][0] = nextX;
+                BFSbuffer[end++][1] = nextY;
+                visited[nextX][nextY] = 1;
                 numOfVisitedPlaces++;
             }
         }
+    }    
+
+    return numOfVisitedPlaces == (game->width * game->height) - game->numOfAddedTraps - 1;
+}
+
+bool CreatesDeadEnd(GameInfo* game, int x, int y, int map[game->width][game->height])
+{
+    Coord directions[] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};    
+
+    for (int i = 0; i < 4; ++i)
+    {
+        int placeX = x + directions[i].x;
+        int placeY = y + directions[i].y;
+        
+        int freeNeighbors = 0;
+        for (int j = 0; j < 4; ++j)
+        {  
+            int nextX = placeX + directions[j].x;
+            int nextY = placeY + directions[j].y;
+            if(nextX == x && nextY == y)
+                continue;
+            if (nextX >= 0 && nextX < game->width && nextY >= 0 && nextY < game->height && map[nextX][nextY] == 0)
+            {
+                freeNeighbors++;
+            }
+        }
+        if(freeNeighbors < 2)
+            return true;
     }
 
-    return numOfVisitedPlaces == (game->width * game->height) - game->numOfAddedTraps;
+    return false; 
 }
 
 bool ContainsWall(GameInfo* game,int y, int x)
@@ -523,4 +590,21 @@ void ResetPlayerInGame(GameInfo* game, int index)
         }
     }
     ResetPlayer(&game->players[index].player, head);
+}
+void PrintLeaderBoard(GameInfo* game, int playerIndex)
+{
+    printf("Game has ended:\n");
+    printf("LeaderBoard:\n");
+    for (int i = 0; i < game->numOfPlayers; ++i)
+    {
+        if(game->players[i].index == playerIndex)
+        {
+            printf("You: \t");
+        }
+        else
+        {
+            printf("Player %d", i);
+        }
+        printf("[%d]\n", game->players[i].player.bodyParts.end);
+    }
 }

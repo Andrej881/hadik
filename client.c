@@ -22,7 +22,6 @@ int GameMenu(struct termios * original)
     SetupTerminal(original); 
     while (1)
     {
-        system("clear");
         for(int i = 0; i < SCREEN_HEIGHT; ++i)
         {
             for(int j = 0; j < SCREEN_WIDTH; ++j)
@@ -109,86 +108,90 @@ int GameMenu(struct termios * original)
                     break;                
                 }
             } 
-        }
-        
+        }        
+        system("clear");        
     }   
     ResetTerminal(original); 
 }
 
 int main(int argc, char *argv[]) {
     ClientGameInfo info;    
-    srand(time(NULL));   
-    
-    switch(GameMenu(&info.original))
-    {        
-    case 1:
+    srand(time(NULL));      
+    bool quit = false;
+    while(!quit)
     {
-        printf("Write Game Port: \n");
-        int port;
-        while (1) {
-            if (scanf("%d", &port) == 1) {
-                if (port >= 1024 && port <= 49151) {
-                    break; // Platné portové číslo, ukonči cyklus
-                } else {
-                    printf("Port number must be between 1024 amd 49151!\n");
-                }
-            } else {
-                printf("Invalid input! Please enter a number.\n");
-                
-                while (getchar() != '\n');
-            }
-            printf("Write Game Port: \n");
-        }
-        int test = NewGame(&info, port);
-        if(test < 0)
+        switch(GameMenu(&info.original))
+        {        
+        case 1:
         {
-            printf("Failed to create Game or Join the created game returned[%d]\n", test);
-            return EXIT_FAILURE;
-        };     
-        Run(&info);
-        break;
-    }        
-    case 2:
-    {                
-        int port;
-        while (1) {
             printf("Write Game Port: \n");
-            if (scanf("%d", &port) == 1) {
-                if (port >= 1024 && port <= 49151) {
-                    break; 
+            int port;
+            while (1) {
+                if (scanf("%d", &port) == 1) {
+                    if (port >= 1024 && port <= 49151) {
+                        break; // Platné portové číslo, ukonči cyklus
+                    } else {
+                        printf("Port number must be between 1024 amd 49151!\n");
+                    }
                 } else {
-                    printf("Port number must be between 1024 amd 49151!\n");
+                    printf("Invalid input! Please enter a number.\n");
+                    
+                    while (getchar() != '\n');
                 }
-            } else {
-                printf("Invalid input! Please enter a number.\n");
-                // Vyčistenie vstupného bufferu
-                while (getchar() != '\n');
+                printf("Write Game Port: \n");
             }
-        }
-        
-        char ip[INET_ADDRSTRLEN];
-
-        while (1) {            
-            printf("Write IP: \n");
-            if (scanf("%s", ip) != 1) { // Read up to 15 characters (+1 for null terminator)
-                printf("Invalid input. Please try again.\n");
-                continue;
-            }
+            int test = NewGame(&info, port);
+            if(test < 0)
+            {
+                printf("Failed to create Game or Join the created game returned[%d]\n", test);
+                break;
+            };     
+            Run(&info);        
             break;
-        }
-
-        if(JoinGame(&info,port,ip) != 0)
-        {
-            perror("Failed to join game");           
-            return EXIT_FAILURE;
         }        
-        Run(&info);
-        break;
-    }        
-    case 3:
-        printf("Ending...\n");
-        break;
-    }    
+        case 2:
+        {                
+            int port;
+            while (1) {
+                printf("Write Game Port: \n");
+                if (scanf("%d", &port) == 1) {
+                    if (port >= 1024 && port <= 49151) {
+                        break; 
+                    } else {
+                        printf("Port number must be between 1024 amd 49151!\n");
+                    }
+                } else {
+                    printf("Invalid input! Please enter a number.\n");
+                    // Vyčistenie vstupného bufferu
+                    while (getchar() != '\n');
+                }
+            }
+            
+            char ip[INET_ADDRSTRLEN];
+
+            while (1) {            
+                printf("Write IP: \n");
+                if (scanf("%s", ip) != 1) { // Read up to 15 characters (+1 for null terminator)
+                    printf("Invalid input. Please try again.\n");
+                    continue;
+                }
+                break;
+            }
+
+            if(JoinGame(&info,port,ip) != 0)
+            {
+                perror("Failed to join game");   
+                break;  
+            }        
+            Run(&info);
+            break;
+        }        
+        case 3:
+            printf("Ending...\n");
+            quit = true;
+            break;
+        } 
+    }       
 	
     return 0;
 }

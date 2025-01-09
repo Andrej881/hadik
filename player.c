@@ -42,6 +42,8 @@ Coord Move(Player* player)
 
 int TryChangeDir(Player* player, Direction dir)
 {
+    if(player->bodyParts.end == 0)
+        return 0;
     Direction forbidenDir;
     switch (dir)
     {

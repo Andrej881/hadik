@@ -23,9 +23,10 @@ typedef struct GameInfo
     int numOfAddedTraps, numOfWalls;
 }GameInfo;
 
-void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, bool walls);
+bool CreatesDeadEnd(GameInfo* game, int x, int y, int map[game->width][game->height]);
+void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gameDuration, int numOfWalls);
 int CreateGameFromFile(GameInfo* game, const char* path);
-bool IsConnected(GameInfo* game,int y, int x, int map[game->width][game->height]);
+bool IsConnected(GameInfo* game,int cY, int cX, int map[game->width][game->height]);
 void GenerateWalls(GameInfo* game);
 int AddPlayer(GameInfo* game);
 bool GameCheckCollisionWithPlayers(GameInfo* game, PlayerArrayInfo* player);
@@ -45,5 +46,5 @@ void DrawGame(GameInfo* game, int playerIndex);//-1 means all players look the s
 int SaveGameSetUp(GameInfo* game, const char* filePath);
 
 void PrintGameContent(GameInfo* game);
-
+void PrintLeaderBoard(GameInfo* game, int playerIndex);
 
