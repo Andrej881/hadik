@@ -121,7 +121,7 @@ int NewGame(ClientGameInfo* info, int port)
         // Server
         printf("Spúšťam server v detskom procese...\n");
 
-        char *server_path = "./server";
+        char *server_path = "./server.out";
         if(file != 0)
         {
             char numStr[12], widthStr[12], heightStr[12], gameTimeStr[12], gameWallsStr[12];
