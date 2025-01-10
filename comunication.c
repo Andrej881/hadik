@@ -8,7 +8,7 @@ void SerializeInitMessage(char* buffer, GameInfo* game)
         return;
     }
     char * ptr = buffer;
-
+    
     //numOfPlayers
     memcpy(ptr, &game->numOfPlayers, sizeof(int));
     ptr += sizeof(int);
@@ -19,6 +19,10 @@ void SerializeInitMessage(char* buffer, GameInfo* game)
 
     //height
     memcpy(ptr, &game->height, sizeof(int));
+    ptr += sizeof(int);
+    
+    //gameDuration
+    memcpy(ptr, &game->gameDuration, sizeof(int));
     ptr += sizeof(int);
 
     //numOfWalls
@@ -35,7 +39,8 @@ void SerializeInitMessage(char* buffer, GameInfo* game)
 void DeserializeInitMessage(char* buffer, GameInfo* game)
 {
     char* ptr = buffer;
-    int numOfPlayers, width, height, numOfWalls;
+    
+    int numOfPlayers, width, height, numOfWalls, gameDuration;
     //numOfPlayers    
     memcpy(&numOfPlayers, ptr, sizeof(int));
     ptr += sizeof(int);
@@ -47,11 +52,15 @@ void DeserializeInitMessage(char* buffer, GameInfo* game)
     memcpy(&height, ptr, sizeof(int));
     ptr += sizeof(int);
 
+    //gameDuration
+    memcpy(&gameDuration, ptr, sizeof(int));
+    ptr += sizeof(int);
+
     //numOfWalls
     memcpy(&numOfWalls, ptr, sizeof(int));   
     ptr += sizeof(int);
     
-    CreateGame(game, numOfPlayers, width, height, 0, 0); 
+    CreateGame(game, numOfPlayers, width, height, gameDuration, 0); 
     game->containsWalls = numOfWalls > 0;
     game->numOfWalls = numOfWalls;
 
@@ -81,10 +90,10 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
         playerListSize[i] = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;
-        size += playerListSize[i] + sizeof(int) * (4 + 2) + sizeof(bool);
+        size += playerListSize[i] + (sizeof(int) * (4 + 3)) + sizeof(bool);
     }
     appleListSize = game->apples.capacity * game->apples.elementSize;
-    size += appleListSize + sizeof(int) * 6 + sizeof(time_t);
+    size += appleListSize + sizeof(int) * 6 + sizeof(time_t) + 1;
 
     *buffer = calloc(size,1);
     if (*buffer == NULL) 
@@ -92,8 +101,9 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
         perror("malloc failed");
         return 0;
     }
-    char* ptr = *buffer;
-    
+    char* ptr = *buffer;    
+    ptr[0] = 'R';
+    ptr++;
     memcpy(ptr, &game->runningTime, sizeof(time_t));
     ptr += sizeof(time_t);
 
@@ -102,6 +112,9 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
     ptr += sizeof(int);
     for (int i = 0; i < game->numOfCurPLayers; ++i)
     {    
+        //maxScore
+        memcpy(ptr, &game->players[i].player.maxScore, sizeof(int));
+        ptr += sizeof(int);
         //Head
         memcpy(ptr, &game->players[i].player.head, sizeof(Coord));
         ptr += sizeof(Coord);
@@ -119,7 +132,7 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
         memcpy(ptr, &game->players[i].player.bodyParts.elementSize, sizeof(int));
         ptr += sizeof(int);
 
-        //List elements
+        //List elements        
         memcpy(ptr, game->players[i].player.bodyParts.elements, playerListSize[i]);
         ptr += playerListSize[i];
     }    
@@ -143,7 +156,8 @@ size_t SerializeServerMessage(char** buffer, GameInfo* game)
 
 void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 {
-    char* ptr = buffer;    
+    char* ptr = buffer;
+    ptr++;  
     int numOfcur = game->numOfCurPLayers;
     memcpy(&game->runningTime, ptr, sizeof(time_t));
     ptr += sizeof(time_t);
@@ -152,37 +166,41 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
     ptr += sizeof(int);
 
     for (int i = 0; i < game->numOfCurPLayers; ++i)
-    {        
+    {      
+        int maxScore;
+        Coord head;
+        bool dead;
+        //maxScore
+        memcpy(&maxScore, ptr, sizeof(int));
+        ptr += sizeof(int);  
         //Head   
-        memcpy(&game->players[i].player.head, ptr, sizeof(Coord));
+        memcpy(&head, ptr, sizeof(Coord));
         ptr += sizeof(Coord);
         //Dead
-        memcpy(&game->players[i].player.dead, ptr, sizeof(bool));
+        memcpy(&dead, ptr, sizeof(bool));
         ptr += sizeof(bool);
 
+        CreatePlayer(&game->players[i].player, head);
+        game->players[i].player.maxScore = maxScore;
+        game->players[i].player.dead = dead;
+
+        int cap, start, end, elSize;
         //List metadata
-        memcpy(&game->players[i].player.bodyParts.capacity, ptr, sizeof(int));
+        memcpy(&cap, ptr, sizeof(int));
         ptr += sizeof(int);
-        memcpy(&game->players[i].player.bodyParts.start, ptr, sizeof(int));
+        memcpy(&start, ptr, sizeof(int));
         ptr += sizeof(int);
-        memcpy(&game->players[i].player.bodyParts.end, ptr, sizeof(int));
+        memcpy(&end, ptr, sizeof(int));
         ptr += sizeof(int);
-        memcpy(&game->players[i].player.bodyParts.elementSize, ptr, sizeof(int));
+        memcpy(&elSize, ptr, sizeof(int));
         ptr += sizeof(int);
 
+        FreeList(&game->players[i].player.bodyParts);
+        CreatList(&game->players[i].player.bodyParts, cap, elSize);
+        game->players[i].player.bodyParts.start = start;
+        game->players[i].player.bodyParts.end = end;
         // Allocate memory for List elements and deserialize
         size_t listSize = game->players[i].player.bodyParts.capacity * game->players[i].player.bodyParts.elementSize;        
-        if(game->players[i].player.bodyParts.elements != NULL)
-        {
-            free(game->players[i].player.bodyParts.elements);
-            game->players[i].player.bodyParts.elements = NULL;
-        }
-        game->players[i].player.bodyParts.elements = malloc(listSize);
-        if(game->players[i].player.bodyParts.elements == NULL)
-        {
-            printf("Fockin NULL you minecraft picture\n");
-            exit(EXIT_FAILURE);
-        }
         memcpy(game->players[i].player.bodyParts.elements, ptr, listSize);
         ptr += listSize;
     }
@@ -213,4 +231,6 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 
     //playerIndex
     memcpy(playerIndex, ptr, sizeof(int));
+
+    game->players[*playerIndex].index = *playerIndex;
 }

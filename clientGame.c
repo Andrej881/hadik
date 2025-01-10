@@ -1,4 +1,5 @@
 #include "clientGame.h"
+#include <arpa/inet.h>
 
 void SetupTerminal(struct termios *original) {
     struct termios new_settings;
@@ -146,10 +147,7 @@ int NewGame(ClientGameInfo* info, int port)
                 perror("execvp failed");
                 return -2;        
             }
-        }
-
-        
-
+        }       
         
     } else {
         // Klient
@@ -182,13 +180,17 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
         return -3;
     }
     char buff[MAX_BUF];
+    bzero(buff, MAX_BUF);
     int test = recv(info->sockfd, buff, MAX_BUF, 0);
     if(buff[0] == 'Q')
     {
         printf("Server is full\n");
         return -4;
-    }
+    }    
     DeserializeInitMessage(buff, &info->game);
+    bzero(buff,4);
+    strcat(buff,"ACK");
+    send(info->sockfd, buff, 4, 0);
 
     printf("Connected to server\n");
     return 0;
@@ -212,7 +214,11 @@ void* DrawToClient(void* args)
             pthread_mutex_unlock(&info->mutex);
             continue;
         }
-        test = recv(info->sockfd, buffer, MAX_BUF, 0);
+        test = recv(info->sockfd, buffer, MAX_BUF, 0);        
+        if (test <= 0) {
+            printf("Failed to receive serialized data %ld", test);            
+            return NULL;
+        }
         if(buffer[0] == 'Q')
         {
             int index;
@@ -220,17 +226,23 @@ void* DrawToClient(void* args)
             PrintLeaderBoard(&info->game, index);
             info->running = false;            
             pthread_mutex_unlock(&info->mutex);
+            char buff[4] = {0};
+            bzero(buff,4);
+            strcat(buff,"ACK");            
+            pthread_mutex_lock(&info->inputMutex);
+            send(info->sockfd, buff, 4, 0);
+            pthread_mutex_unlock(&info->inputMutex);
             break;
         }
         pthread_mutex_unlock(&info->mutex);
-        if (test <= 0) {
-            printf("Failed to receive serialized data %ld", test);            
-            return NULL;
-        }
         int playerIndex;
+        for(int i = info->game.numOfCurPLayers - 1; i >= 0; i--)
+        {
+            RemovePlayer(&info->game, &info->game.players[i]);
+        }
         DeserializeServerMessage(buffer, &info->game, &playerIndex);
+        
         //PrintGameContent(&info->game);
-        info->game.players[playerIndex].index = playerIndex;
         if (playerIndex == 0)
         {
             for (int i = 1; i < info->game.numOfCurPLayers; ++i)
@@ -252,25 +264,30 @@ void* DrawToClient(void* args)
 void* SendDataToServer(void* args)
 {
     int n;
+    char lastChar = ' ';
     ClientGameInfo* info = (ClientGameInfo*) args;
     while (info->running) {    
         //usleep(200000);    
         pthread_mutex_lock(&info->inputMutex);
-        
-        if (info->inputBuff[0] == 'q') {
+        char c = info->inputBuff[0];
+        if (c == 'q') {
             pthread_mutex_lock(&info->mutex);
             if (info->dead)
                 info->running = false;  // Ukončenie programu            
             pthread_mutex_unlock(&info->mutex);
         } 
-        n = write(info->sockfd, info->inputBuff, strlen(info->inputBuff));
-        if (n < 0) {            
-            perror("ERROR writing to socket");
-            return NULL;
+        if(c != lastChar)
+        {
+            n = write(info->sockfd, info->inputBuff, strlen(info->inputBuff));
+            if (n < 0) {            
+                perror("ERROR writing to socket");
+                return NULL;
+            }
         }
-        pthread_mutex_unlock(&info->inputMutex);        
+        pthread_mutex_unlock(&info->inputMutex);       
+        lastChar = c; 
     }
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
 }
 
 void* ManageInputs(void* args)
@@ -278,7 +295,14 @@ void* ManageInputs(void* args)
     ClientGameInfo* info = (ClientGameInfo*) args;
 	char lastCh = 'd'; 
     fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);//aby sa v hre necakalo na input
-    while (info->running) {  
+    while (1) {  
+        pthread_mutex_lock(&info->mutex);
+        if (!info->running)
+        {
+            pthread_mutex_unlock(&info->mutex);
+            break;
+        }
+        pthread_mutex_unlock(&info->mutex);
         char ch;
         if(read(STDIN_FILENO, &ch, 1) == 1)
 		{

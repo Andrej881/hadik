@@ -14,6 +14,7 @@ typedef struct Player{
     List bodyParts;
     Direction curDir;
     bool dead;
+    int maxScore;
 } Player;
 
 void CreatePlayer(Player *  player, Coord coord);

@@ -20,6 +20,7 @@ void CreateGame(GameInfo* game, int numOfplayers, int width, int height, int gam
     }  
 
     game->players = malloc(numOfplayers * sizeof(PlayerArrayInfo));  
+    
     for (int i = 0; i < numOfplayers; ++i)
     {
         game->players[i].index = -1;
@@ -151,7 +152,7 @@ void GenerateWalls(GameInfo* game)
                     badCoords[numOfBadCoords++] = coord;
                 if(numOfBadCoords >= game->width * game->height)
                 {
-                    printf("Cannot generate walls without making it unplayable Current walls:\n");
+                    printf("Cannot generate walls without making it unplayable Current walls generated only %d walls:\n", game->numOfAddedTraps);
                     for(int i = 0; i < game->height; ++i)
                     {
                         for (int j = 0; j < game->width; ++j)
@@ -160,6 +161,7 @@ void GenerateWalls(GameInfo* game)
                         }
                         printf("\n");
                     }
+                    game->numOfWalls = game->numOfAddedTraps;
                     return;
                 }
             }
@@ -168,15 +170,6 @@ void GenerateWalls(GameInfo* game)
         game->walls[i] = coord;
         map[coord.x][coord.y] = 1;
     }
-    for(int i = 0; i < game->height; ++i)
-    {
-        for(int j = 0; j < game->width; ++j)
-        {
-            printf("%d ",map[j][i]);
-        }
-        printf("\n");
-    }
-    printf("\n");
 }
 
 bool IsConnected(GameInfo* game,int cY, int cX, int map[game->width][game->height])
@@ -411,7 +404,7 @@ void RemoveGame(GameInfo* game)
     FreeList(&game->apples);
     for(int i = game->numOfCurPLayers-1; i >= 0; i--)
     {
-        RemovePlayer(game, &game->players[i]);
+        DeletePlayer(&game->players[i].player);
     }
     free(game->players);
     game->players = NULL;
@@ -431,7 +424,14 @@ void DrawGame(GameInfo* game, int playerIndex)
 {          
     system("clear");
     if (playerIndex >= 0)
-        printf("Score: %d\tTime %ld\n", game->players[playerIndex].player.bodyParts.end, game->runningTime);
+    {
+        printf("CurrentScore: %d\tTime %ld", game->players[playerIndex].player.bodyParts.end, game->runningTime);
+        if(game->timeEnd)
+        {
+            printf("/%d", game->gameDuration);
+        }
+        printf("\n");
+    }
     for(int i = -1; i <= game->height; ++i)
     {        
         if(i == -1 || i == game->height)
@@ -453,6 +453,14 @@ void DrawGame(GameInfo* game, int playerIndex)
             if(j == -1 || j == game->width)
             {
                 printf("# ");
+                if(j == game->width && game->numOfCurPLayers > i)
+                {
+                    if(playerIndex == game->players[i].index)
+                        printf("Your max: ");
+                    else
+                        printf("Player[%d] max: ",i);
+                    printf("[%d]", game->players[i].player.maxScore);
+                }
                 continue;
             }
             int headTest = ContainsPlayerHead(game, i, j, playerIndex);
@@ -595,7 +603,7 @@ void PrintLeaderBoard(GameInfo* game, int playerIndex)
 {
     printf("Game has ended:\n");
     printf("LeaderBoard:\n");
-    for (int i = 0; i < game->numOfPlayers; ++i)
+    for (int i = 0; i < game->numOfCurPLayers; ++i)
     {
         if(game->players[i].index == playerIndex)
         {
@@ -605,6 +613,6 @@ void PrintLeaderBoard(GameInfo* game, int playerIndex)
         {
             printf("Player %d", i);
         }
-        printf("[%d]\n", game->players[i].player.bodyParts.end);
+        printf("[%d]\n", game->players[i].player.maxScore);
     }
 }

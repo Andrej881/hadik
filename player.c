@@ -5,12 +5,14 @@ void CreatePlayer(Player * player, Coord coord)
     player->dead = false;
     CreatList(&player->bodyParts, 15, sizeof(Coord));
     player->curDir = RIGHT;
+    player->maxScore = 0;
 }
 
 void AddPart(Player * player, Coord coord)
 {   
     Coord new = coord;
-    AddList(&player->bodyParts, &new);
+    AddList(&player->bodyParts, &new);    
+    player->maxScore = player->bodyParts.end > player->maxScore ? player->bodyParts.end : player->maxScore;
 }
 
 Coord Move(Player* player)
@@ -43,7 +45,11 @@ Coord Move(Player* player)
 int TryChangeDir(Player* player, Direction dir)
 {
     if(player->bodyParts.end == 0)
+    {
+        player->curDir = dir;
         return 0;
+    }
+        
     Direction forbidenDir;
     switch (dir)
     {
@@ -87,6 +93,8 @@ void PrintPlayer(Player* player)
 
 void ResetPlayer(Player * player, Coord coord)
 {
-    DeletePlayer(player);
-    CreatePlayer(player, coord);
+    FreeList(&player->bodyParts);
+    player->dead = false;
+    CreatList(&player->bodyParts, 15, sizeof(Coord));
+    player->head = coord;
 }
