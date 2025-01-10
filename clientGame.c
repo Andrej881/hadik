@@ -241,7 +241,7 @@ void* DrawToClient(void* args)
         int playerIndex;
         for(int i = info->game.numOfCurPLayers - 1; i >= 0; i--)
         {
-            RemovePlayer(&info->game, &info->game.players[i]);
+            DeletePlayer(&info->game.players[i].player);
         }
         DeserializeServerMessage(buffer, &info->game, &playerIndex);
         

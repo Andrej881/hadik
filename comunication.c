@@ -180,8 +180,10 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
         ptr += sizeof(bool);
 
         CreatePlayer(&game->players[i].player, head);
+        game->players[i].player.head = head;
         game->players[i].player.maxScore = maxScore;
         game->players[i].player.dead = dead;
+        game->players[i].index = i;
 
         int cap, start, end, elSize;
         //List metadata
