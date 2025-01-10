@@ -158,7 +158,6 @@ void DeserializeServerMessage(char* buffer, GameInfo* game, int* playerIndex)
 {
     char* ptr = buffer;
     ptr++;  
-    int numOfcur = game->numOfCurPLayers;
     memcpy(&game->runningTime, ptr, sizeof(time_t));
     ptr += sizeof(time_t);
     //curPlayers

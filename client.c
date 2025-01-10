@@ -114,7 +114,7 @@ int GameMenu(struct termios * original)
     ResetTerminal(original); 
 }
 
-int main(int argc, char *argv[]) {
+int main() {
     ClientGameInfo info;    
     srand(time(NULL));      
     bool quit = false;

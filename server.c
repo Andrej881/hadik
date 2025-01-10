@@ -63,6 +63,7 @@ void* waitingTimer(void* args)
         }
         pthread_mutex_unlock(data->gameMutex);
     }
+    pthread_exit(NULL);
 }
 
 void* readPlayerDirection(void* args)
@@ -259,12 +260,10 @@ void* sendGameData(void* args)
         usleep(200000);//BEZ TOHO -> SEG FAULT U KLIENTA
         passed = time(NULL) - start;
     } 
+    pthread_exit(NULL);
 }
 
 int init(ServerInfo* serverInfo,int serverSocket, int numOfPlayers) {
-    int n;
-    char buffer[256];
-
     bzero((char*)&serverInfo->serv_addr, sizeof(serverInfo->serv_addr));
     serverInfo->serv_addr.sin_family = AF_INET;
     serverInfo->serv_addr.sin_addr.s_addr = INADDR_ANY;

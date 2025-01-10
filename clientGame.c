@@ -181,11 +181,15 @@ int JoinGame(ClientGameInfo* info, int port, const char* ip)
     }
     char buff[MAX_BUF];
     bzero(buff, MAX_BUF);
-    int test = recv(info->sockfd, buff, MAX_BUF, 0);
+    size_t test = recv(info->sockfd, buff, MAX_BUF, 0);
+    if (test <= 0) {
+        printf("Failed to receive init data %ld", test);            
+        return -4;
+    }
     if(buff[0] == 'Q')
     {
         printf("Server is full\n");
-        return -4;
+        return -5;
     }    
     DeserializeInitMessage(buff, &info->game);
     bzero(buff,4);
@@ -204,7 +208,6 @@ void* DrawToClient(void* args)
     while(running)
     {  
         bzero(buffer, MAX_BUF);
-        size_t bufferSize;
         // Receive the serialized data
         ssize_t test = -1;
         pthread_mutex_lock(&info->mutex);
@@ -287,7 +290,7 @@ void* SendDataToServer(void* args)
         pthread_mutex_unlock(&info->inputMutex);       
         lastChar = c; 
     }
-    //pthread_exit(NULL);
+    pthread_exit(NULL);
 }
 
 void* ManageInputs(void* args)
